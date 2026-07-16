@@ -15,7 +15,6 @@
 #include <steam/steamnetworkingsockets.h>
 
 #include "RED4ext/Scripting/Natives/Generated/anim/AnimFeature_Crowd.hpp"
-#include "RED4ext/Scripting/Natives/Generated/anim/AnimFeature_HitReactionsData.hpp"
 #include "RED4ext/Scripting/Natives/Generated/anim/AnimFeature_CrowdLocomotion.hpp"
 #include "RED4ext/Scripting/Natives/Generated/anim/AnimFeature_Locomotion.hpp"
 #include "RED4ext/Scripting/Natives/Generated/anim/Locomotion_Style.hpp"
@@ -201,13 +200,8 @@ void NetworkGameSystem::SetEntityPosition(const RED4ext::ent::EntityID entityId,
 
     if (entity.has_value())
     {
-        // TODO: Find out if this is an NPCPuppet...
-        // AI
-        RED4ext::Handle<RED4ext::AICommand> commandRef;
-        Red::CallVirtual(this, "TeleportPuppet", commandRef, entity.value(), worldPosition, yaw);
-        m_LastTeleportCommand[entityId] = commandRef;
-
-        // random game objects
+        // (AI-command teleport path removed: AI-free template puppets have no
+        // AIControllerComponent — the old TeleportPuppet call was a script null-deref.)
         RED4ext::EulerAngles angles = { 0.0f, 0.0f, yaw };
         const auto teleportFacility = Red::GetGameSystem<RED4ext::TeleportationFacility>();
         if (!Red::CallVirtual(teleportFacility, "Teleport", entity.value() /*"game object"*/, worldPosition, angles))
@@ -228,49 +222,20 @@ void NetworkGameSystem::SetEntityPosition(const RED4ext::ent::EntityID entityId,
 
 void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
 {
-    // DISCRIMINATOR PROBE (temporary): every 2.5 s queue a "hit" feature (hitType=1) on every
-    // tracked puppet. The graph reacts to hit.hitType==1 with a flinch (12 transitions test it).
-    // Visible flinch => our AnimInputSetterAnimFeature events DO reach the graph's feature
-    // storage, and the locomotion failure is a writer race / state gating. No flinch => the
-    // event route itself never lands and we debug that instead.
-#define CHOOMLINK_HIT_PROBE 1
-#if CHOOMLINK_HIT_PROBE
-    static float s_hitProbeTimer = 0.0f;
-    s_hitProbeTimer += deltaTime;
-    const bool fireHitProbe = s_hitProbeTimer >= 2.5f;
-    if (fireHitProbe)
+    // DIAG PROBE (temporary, phase 4b iteration 2): every 2.5 s dump the interpolation state
+    // so the log discriminates "moveState never populated" vs "interpolation runs but the
+    // teleport facility no-ops on template-spawned puppets".
+    static float s_diagTimer = 0.0f;
+    s_diagTimer += deltaTime;
+    const bool diagNow = s_diagTimer >= 2.5f;
+    if (diagNow)
     {
-        s_hitProbeTimer = 0.0f;
+        s_diagTimer = 0.0f;
+        SDK->logger->InfoF(PLUGIN, "diag: movementState size=%zu", m_movementState.size());
     }
-#endif
 
     for (auto& [entityId, state] : m_movementState)
     {
-#if CHOOMLINK_HIT_PROBE
-        if (fireHitProbe)
-        {
-            if (const auto probeEntity = Cyberverse::Utils::GetDynamicEntity(entityId); probeEntity.has_value())
-            {
-                auto hitFeature = Red::MakeScriptedHandle<RED4ext::anim::AnimFeature_HitReactionsData>("animAnimFeature_HitReactionsData");
-                if (hitFeature)
-                {
-                    hitFeature->hitType = 3; // anim::HitReactionType::Stagger — unmissable in stills
-                    hitFeature->hitIntensity = 2;
-                    hitFeature->hitBodyPart = 1;
-                    hitFeature->hitDirection = 0;
-                    hitFeature->hitSource = 1;
-                    const RED4ext::Handle<RED4ext::anim::AnimFeature> hitBase = hitFeature;
-                    if (!Red::CallVirtual(this, "ApplyAnimFeature", probeEntity.value(), RED4ext::CName("hit"), hitBase))
-                    {
-                        SDK->logger->Warn(PLUGIN, "hit probe: ApplyAnimFeature call failed");
-                    }
-                    // Feature alone is inert data — the graph transition also needs the
-                    // external "hit" event (16 ExternalEvent conditions in humanoid.animgraph).
-                    Red::CallVirtual(this, "PushPuppetEvent", probeEntity.value(), RED4ext::CName("hit"));
-                }
-            }
-        }
-#endif
         state.timeSinceUpdate += deltaTime;
         if (!state.hasTarget)
         {
@@ -288,6 +253,12 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
         const float remY = state.targetPosition.Y - pos.Y;
         const float remZ = state.targetPosition.Z - pos.Z;
         const float remaining = std::sqrt(remX * remX + remY * remY + remZ * remZ);
+
+        if (diagNow)
+        {
+            SDK->logger->InfoF(PLUGIN, "diag: entity %llu pos=(%.2f, %.2f, %.2f) remaining=%.2f speed=%.2f",
+                               entityId.hash, pos.X, pos.Y, pos.Z, remaining, state.speed);
+        }
 
         if (remaining < 0.02f || state.speed <= 0.01f)
         {
@@ -319,6 +290,10 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
 
 void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& entity, const MovementState& state)
 {
+    // (Feed re-enabled 2026-07-16: the frozen-position regression was NOT the feed — it was
+    // TeleportationFacility no-opping on puppets; KinematicMove now moves puppets via
+    // AITeleportCommand + ForceTickNextFrame. This feed is the anim-side experiment on the
+    // stripped template.)
     // Both feature classes are native-only (not script-exposed); we build them here and queue
     // the same AnimInputSetterAnimFeature event the game's redscript ApplyFeature helper
     // queues. Input names, classes AND value semantics verified against the WolvenKit dump of
@@ -525,7 +500,17 @@ void NetworkGameSystem::PollIncomingMessages()
 
             // Non-puppets (vehicles, items) have no AI locomotion — plain teleport, done.
             bool handledAsNonPuppet = false;
-            Red::CallVirtual(this, "TeleportIfNotPuppet", handledAsNonPuppet, entity.value(), worldPosition, teleport.yaw);
+            const bool castCallOk =
+                Red::CallVirtual(this, "TeleportIfNotPuppet", handledAsNonPuppet, entity.value(), worldPosition, teleport.yaw);
+            // DIAG (temporary): which branch does a template-spawned puppet take? Logged only on
+            // the first few packets per session to avoid 10 Hz spam.
+            static int s_branchDiagCount = 0;
+            if (s_branchDiagCount < 12)
+            {
+                ++s_branchDiagCount;
+                SDK->logger->InfoF(PLUGIN, "diag: teleport branch for %llu: callOk=%d handledAsNonPuppet=%d",
+                                   teleport.networkedEntityId, castCallOk, handledAsNonPuppet);
+            }
             if (handledAsNonPuppet)
             {
                 break;

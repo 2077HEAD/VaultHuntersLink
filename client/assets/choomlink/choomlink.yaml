@@ -1,0 +1,9 @@
+# ChoomLink remote-player puppet record (TweakXL).
+# A real Character record whose entity template is our AI-free puppet_base.ent:
+# spawning through a Character record keeps the engine-native population/teleport
+# machinery (Codeware's templatePath spawns use a synthetic SpawnableObject record,
+# on which TeleportationFacility.Teleport silently no-ops), while the stripped
+# template still has no AI/move-writer components fighting the network anim feed.
+Character.choomlink_puppet:
+  $base: Character.Judy
+  entityTemplatePath: base\choomlink\puppet_base.ent

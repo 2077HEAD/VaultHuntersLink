@@ -9,19 +9,26 @@ public native class NetworkGameSystem extends IGameSystem {
     
     public func SpawnTransientEntity(entityName: TweakDBID, worldPosition: Vector4, worldOrientation: Quaternion) -> EntityID {
         let npcSpec = new DynamicEntitySpec();
-        //npcSpec.recordID = t"Character.spr_animals_bouncer1_ranged1_omaha_mb";
-        npcSpec.recordID = entityName; //t"Character.Panam";
-        //npcSpec.appearanceName = n"random"; // TODO
+        // AI-free custom puppet (phase 4b iteration 2): a real Character record (TweakXL,
+        // client/assets/choomlink/choomlink.yaml) whose entityTemplatePath points to our
+        // stripped puppet_base.ent. Record spawn keeps the engine-native population/teleport
+        // machinery (raw templatePath spawns get a synthetic SpawnableObject record on which
+        // TeleportationFacility.Teleport silently no-ops — measured, diag 2026-07-16), while
+        // the template itself has no AI/move-writer components fighting the network anim feed.
+        // entityName is intentionally unused for now — kept for a quick vanilla A/B fallback.
+        // Stripped-template record (TweakXL, client/assets/choomlink/choomlink.yaml):
+        // Character record inheriting Judy, entityTemplatePath → puppet_base.ent with
+        // senses/reactions/combat stripped; AIHumanComponent + NPCStatesComponent + move
+        // trio kept — the AI controller is the engine's only teleport executor (measured
+        // 2026-07-16: TeleportationFacility no-ops on puppets, AITeleportCommand +
+        // ForceTickNextFrame tracks at full speed).
+        npcSpec.recordID = t"Character.choomlink_puppet";
 
         // Trust the server to properly track the entity state, because otherwise,
         // entities will just disappear for the client and never get back
         // (i.e. being invisible), as the server will only re-spawn them when
         // they have been properly despawned.
         npcSpec.alwaysSpawned = true;
-        
-        // base\characters\entities\main_npc\panam.ent
-        //npcSpec.recordID = t"Vehicle.v_sport2_quadra_type66";
-        //npcSpec.appearanceName = n"quadra_type66__basic_bulleat";
 
         npcSpec.position = worldPosition;
         npcSpec.orientation = worldOrientation;
@@ -114,7 +121,28 @@ public native class NetworkGameSystem extends IGameSystem {
 
     // Kinematic per-frame move for remote puppets (AI-free locomotion, phase 4b): the C++
     // interpolation calls this every frame with the next position on the network path.
+    // DIAG BISECT (temporary): facility teleports measurably no-op on puppets right now
+    // (positions frozen, diag 2026-07-16) — route through the iteration-0 AI teleport
+    // command instead to establish whether ANY mover works in the current engine state.
+    // Works only on puppets with an AI controller (vanilla baseline), which is what the
+    // bisect currently spawns.
     public func KinematicMove(entity: ref<Entity>, position: Vector4, yaw: Float) {
+        let puppet = entity as ScriptedPuppet;
+        if IsDefined(puppet) {
+            let ctrl = puppet.GetAIControllerComponent();
+            if IsDefined(ctrl) {
+                let teleportCommand = new AITeleportCommand();
+                teleportCommand.position = position;
+                teleportCommand.rotation = yaw;
+                teleportCommand.doNavTest = false;
+                ctrl.SendCommand(teleportCommand);
+                // Without this the command sits in the AI queue until the puppet's next
+                // (LOD-throttled) AI tick — measured ~0.1 Hz effective, 2026-07-16. With it
+                // the AI ticks this frame and the teleport lands at interpolation rate.
+                ctrl.ForceTickNextFrame();
+                return;
+            }
+        }
         let go = entity as GameObject;
         if !IsDefined(go) {
             return;
