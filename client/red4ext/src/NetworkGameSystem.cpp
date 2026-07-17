@@ -289,30 +289,26 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
         }
 
         const auto pos = Cyberverse::Utils::Entity_GetWorldPosition(entity.value());
-        const float remX = state.targetPosition.X - pos.X;
-        const float remY = state.targetPosition.Y - pos.Y;
-        const float remZ = state.targetPosition.Z - pos.Z;
+        if (!state.idealValid)
+        {
+            state.idealPos = { pos.X, pos.Y, pos.Z, 1.0f };
+            state.idealValid = true;
+        }
+
+        // Advance the virtual path point toward the latest network target (time-based, never
+        // relative to the puppet's actual position — see MovementState::idealPos).
+        const float remX = state.targetPosition.X - state.idealPos.X;
+        const float remY = state.targetPosition.Y - state.idealPos.Y;
+        const float remZ = state.targetPosition.Z - state.idealPos.Z;
         const float remaining = std::sqrt(remX * remX + remY * remY + remZ * remZ);
 
         if (diagNow)
         {
-            SDK->logger->InfoF(PLUGIN, "diag: entity %llu pos=(%.2f, %.2f, %.2f) remaining=%.2f speed=%.2f",
-                               entityId.hash, pos.X, pos.Y, pos.Z, remaining, state.speed);
-
-            // D1 PROBE (temporary): every diag tick, launch the "Walk" action anim
-            // (AIActionAnimData record 140240307976, from the RTTI dump) through
-            // ActionAnimationScriptProxy. Success criterion: Setup=true in this log AND
-            // visible full-body anim in the screenshot burst.
-            static int s_actionProbeCount = 0;
-            if (s_actionProbeCount < 40)
-            {
-                ++s_actionProbeCount;
-                const RED4ext::TweakDBID walkAnimData(140240307976ULL);
-                bool setupOk = false;
-                const bool callOk = Red::CallVirtual(this, "TryActionAnim", setupOk, entity.value(), walkAnimData);
-                SDK->logger->InfoF(PLUGIN, "diag: actionAnim probe on %llu callOk=%d setupOk=%d", entityId.hash,
-                                   callOk, setupOk);
-            }
+            const float lagX = state.idealPos.X - pos.X;
+            const float lagY = state.idealPos.Y - pos.Y;
+            const float lag = std::sqrt(lagX * lagX + lagY * lagY);
+            SDK->logger->InfoF(PLUGIN, "diag: entity %llu pos=(%.2f, %.2f, %.2f) remaining=%.2f speed=%.2f lag=%.2f",
+                               entityId.hash, pos.X, pos.Y, pos.Z, remaining, state.speed, lag);
         }
 
         if (remaining < 0.02f || state.speed <= 0.01f)
@@ -323,7 +319,73 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
                 DriveLocomotionFeed(entity.value(), state); // blend to idle, once
                 state.idleApplied = true;
             }
+            if (state.walkAnim) // arrived/stopped: release the walk anim, graph blends to idle
+            {
+                Red::CallVirtual(this, "StopActionAnim", state.walkAnim);
+                state.walkAnim.Reset();
+            }
             continue;
+        }
+
+        // D1 walk-loop driver — DISABLED for locomotion (client rule: smooth gliding beats
+        // glitchy anims). Measured 2026-07-17: every AIActionAnimData "walk" record is a
+        // short one-shot reaction clip (COMPLETE within 0.25 s even in phase Loop; the only
+        // loopable records are boss/defeated states), so the relaunch cycle resets the pose
+        // 4x/s — the stutter the client saw live. The proxy machinery itself works and stays
+        // for one-shot anims (combat sync, gestures); locomotion cycles need the graph
+        // (custom animgraph branch) or spline-following move execution instead.
+#define CHOOMLINK_D1_WALK_DRIVER 0
+#if CHOOMLINK_D1_WALK_DRIVER
+        state.walkAnimPoll += deltaTime;
+        bool launchWalk = !state.walkAnim;
+        if (!launchWalk && state.walkAnimPoll >= 0.25f)
+        {
+            state.walkAnimPoll = 0.0f;
+            int32_t status = 0;
+            Red::CallVirtual(this, "GetActionAnimStatus", status, state.walkAnim);
+            // Relaunch ONLY on terminal states. A fresh proxy may report BOUND(1)/READY(2)
+            // before the action machinery picks it up — relaunching on those resets the pose
+            // several times per second (visible stutter).
+            launchWalk = status == 0 || status == 4 || status == 5; // INVALID / COMPLETE / FAILURE
+            static int s_statusDiagCount = 0;
+            if (s_statusDiagCount < 30)
+            {
+                ++s_statusDiagCount;
+                SDK->logger->InfoF(PLUGIN, "diag: walkAnim status=%d on %llu%s", status, entityId.hash,
+                                   launchWalk ? " -> relaunch" : "");
+            }
+        }
+        if (launchWalk)
+        {
+            const RED4ext::TweakDBID walkAnimData(140240307976ULL); // "Walk" (RTTI dump 2026-07-17)
+            Red::Handle<RED4ext::IScriptable> proxy;
+            // Phase 2 = EAIActionPhase.Loop: runs for stateDuration instead of completing
+            // immediately like Startup did (the 4x/s relaunch pose-reset was the visible
+            // stutter, measured 2026-07-17). Long duration; the status poll stays as a
+            // safety net to relaunch when the loop eventually ends.
+            Red::CallVirtual(this, "StartActionAnim", proxy, entity.value(), walkAnimData, static_cast<int32_t>(2),
+                             60.0f);
+            state.walkAnim = proxy;
+            state.walkAnimPoll = 0.0f;
+        }
+#endif
+
+        // STUTTER DIAG (temporary, one entity): trace the actual rendered position every frame
+        // for ~90 frames. If it advances once per frame the mover is smooth and the stutter is
+        // anim-side; if it jumps once per packet (~10 Hz) the AI executes only a fraction of
+        // the per-frame teleport commands.
+        static RED4ext::ent::EntityID s_traceEntity {};
+        static int s_traceFrames = 0;
+        if (s_traceEntity.hash == 0 && state.speed > 1.0f)
+        {
+            s_traceEntity = entityId;
+            s_traceFrames = 90;
+        }
+        if (entityId == s_traceEntity && s_traceFrames > 0)
+        {
+            --s_traceFrames;
+            SDK->logger->InfoF(PLUGIN, "trace: %llu pos=(%.3f, %.3f) dt=%.4f", entityId.hash, pos.X, pos.Y,
+                               deltaTime);
         }
 
         float step = state.speed * deltaTime;
@@ -332,10 +394,10 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
             step = remaining; // never overshoot the last known target
         }
 
-        const RED4ext::Vector4 newPos = { pos.X + remX / remaining * step,
-                                          pos.Y + remY / remaining * step,
-                                          pos.Z + remZ / remaining * step, 1.0f };
-        Red::CallVirtual(this, "KinematicMove", entity.value(), newPos, state.targetYaw);
+        state.idealPos.X += remX / remaining * step;
+        state.idealPos.Y += remY / remaining * step;
+        state.idealPos.Z += remZ / remaining * step;
+        Red::CallVirtual(this, "KinematicMove", entity.value(), state.idealPos, state.targetYaw);
 
         // Re-feed the anim graph every frame while moving: the puppet's resident AI behavior
         // writes the locomotion feature each tick, and a once-per-packet event loses that race.
@@ -583,9 +645,14 @@ void NetworkGameSystem::PollIncomingMessages()
 
             if (puppetLag > 8.0f)
             {
-                // Desync / spawn placement / vehicle exit: hard-teleport to catch up.
-                SDK->logger->TraceF(PLUGIN, "Entity %llu is %f m off target, teleport catch-up", teleport.networkedEntityId, puppetLag);
-                SetEntityPosition(entityId, worldPosition, teleport.yaw);
+                // Desync / spawn placement / vehicle exit: snap the virtual path point to the
+                // target — the next per-frame teleport command lands there (the old path
+                // zeroed `speed`, which stalled the puppet until the next packet: the
+                // once-per-second halting the client saw live 2026-07-17).
+                SDK->logger->InfoF(PLUGIN, "Entity %llu is %.1f m off target, snapping path point",
+                                   teleport.networkedEntityId, puppetLag);
+                moveState.idealPos = worldPosition;
+                moveState.idealValid = true;
                 moveState.targetPosition = worldPosition;
                 moveState.targetYaw = teleport.yaw;
                 moveState.velocity = {};

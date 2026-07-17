@@ -45,6 +45,16 @@ private:
         float timeSinceUpdate = 0.0f;    // accumulated frame dt since the last packet
         bool hasTarget = false;
         bool idleApplied = false;        // idle anim feed sent since arrival (send once)
+        // Virtual point advancing along the network path at `speed`, independent of the
+        // puppet's actual position. Teleport commands always target this point, so AI ticks
+        // that skip a command don't accumulate lag (the next executed command lands on the
+        // correct current path point).
+        RED4ext::Vector4 idealPos {};
+        bool idealValid = false;
+        // D1 walk-loop driver: the ActionAnimationScriptProxy currently playing the walk
+        // anim on this puppet (null while idle) + poll accumulator for clip-end detection.
+        RED4ext::Handle<RED4ext::IScriptable> walkAnim;
+        float walkAnimPoll = 0.0f;
     };
     std::map<RED4ext::ent::EntityID, MovementState> m_movementState;
     std::map<RED4ext::ent::EntityID, RED4ext::Handle<RED4ext::AICommand>> m_LastTeleportCommand;

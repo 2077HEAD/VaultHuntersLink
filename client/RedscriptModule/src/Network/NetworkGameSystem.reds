@@ -152,28 +152,50 @@ public native class NetworkGameSystem extends IGameSystem {
         GameInstance.GetTeleportationFacility(go.GetGame()).Teleport(go, position, angles);
     }
 
-    // D1 PROBE (temporary): fire a full-body slot animation on a puppet via the game's own
-    // ActionAnimationScriptProxy — the trigger our raw AnimFeatures lacked (NPC anims are
-    // gated behind the AI action machinery; this IS that machinery, minus the AI decision).
-    public func TryActionAnim(entity: ref<Entity>, actionRecordId: TweakDBID) -> Bool {
+    // D1 locomotion-anim driver: full-body anims on remote puppets via the game's own
+    // ActionAnimationScriptProxy — the AI-action machinery, instantiated by US (no AI
+    // decision involved). Verified 2026-07-17: raw features/events never drive the NPC
+    // graph, this proxy does. The C++ interpolation launches/loops/stops these.
+
+    // Launches a full-body action anim; returns the proxy for status polling (null = failure).
+    // Root motion stays OFF — translation belongs to the kinematic interpolation.
+    // phase: EAIActionPhase as Int32 — 1 = Startup (one-shot, completes immediately),
+    // 2 = Loop (runs for stateDuration; the walk driver uses this).
+    public func StartActionAnim(entity: ref<Entity>, actionRecordId: TweakDBID, phase: Int32, duration: Float) -> ref<ActionAnimationScriptProxy> {
         let puppet = entity as ScriptedPuppet;
         if !IsDefined(puppet) {
-            return false;
+            return null;
         }
         let record = TweakDBInterface.GetAIActionAnimDataRecord(actionRecordId);
         if !IsDefined(record) {
-            FTLog(s"[ChoomLink] TryActionAnim: no record for \(TDBID.ToStringDEBUG(actionRecordId))");
-            return false;
+            return null;
         }
         let proxy = new ActionAnimationScriptProxy();
         proxy.Bind(puppet);
         let feature = new AnimFeature_AIAction();
-        feature.state = 1;
-        feature.stateDuration = 3.0;
+        feature.state = phase;
+        feature.stateDuration = duration;
         let slideParams: ActionAnimationSlideParams;
-        let ok = proxy.Setup(record.AnimFeature(), feature, false, false, false, false, false, slideParams, null, 0.0);
+        if !proxy.Setup(record.AnimFeature(), feature, false, false, false, false, false, slideParams, null, 0.0) {
+            return null;
+        }
         proxy.Launch();
-        return ok;
+        return proxy;
+    }
+
+    // gameEActionStatus as Int32 (3 = STATUS_PROGRESS); used by C++ to detect clip end for
+    // the walk loop relaunch.
+    public func GetActionAnimStatus(proxy: ref<ActionAnimationScriptProxy>) -> Int32 {
+        if !IsDefined(proxy) {
+            return 0; // STATUS_INVALID
+        }
+        return EnumInt(proxy.GetStatus());
+    }
+
+    public func StopActionAnim(proxy: ref<ActionAnimationScriptProxy>) {
+        if IsDefined(proxy) {
+            proxy.Stop();
+        }
     }
 
     // Relayed remote-player actions (EntityAction packet). Unknown actions are ignored on
