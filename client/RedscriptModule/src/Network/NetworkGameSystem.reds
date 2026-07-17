@@ -152,6 +152,30 @@ public native class NetworkGameSystem extends IGameSystem {
         GameInstance.GetTeleportationFacility(go.GetGame()).Teleport(go, position, angles);
     }
 
+    // D1 PROBE (temporary): fire a full-body slot animation on a puppet via the game's own
+    // ActionAnimationScriptProxy — the trigger our raw AnimFeatures lacked (NPC anims are
+    // gated behind the AI action machinery; this IS that machinery, minus the AI decision).
+    public func TryActionAnim(entity: ref<Entity>, actionRecordId: TweakDBID) -> Bool {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return false;
+        }
+        let record = TweakDBInterface.GetAIActionAnimDataRecord(actionRecordId);
+        if !IsDefined(record) {
+            FTLog(s"[ChoomLink] TryActionAnim: no record for \(TDBID.ToStringDEBUG(actionRecordId))");
+            return false;
+        }
+        let proxy = new ActionAnimationScriptProxy();
+        proxy.Bind(puppet);
+        let feature = new AnimFeature_AIAction();
+        feature.state = 1;
+        feature.stateDuration = 3.0;
+        let slideParams: ActionAnimationSlideParams;
+        let ok = proxy.Setup(record.AnimFeature(), feature, false, false, false, false, false, slideParams, null, 0.0);
+        proxy.Launch();
+        return ok;
+    }
+
     // Relayed remote-player actions (EntityAction packet). Unknown actions are ignored on
     // purpose — forward compatibility for swim/climb/... in later phases.
     public func PuppetAction(entity: ref<Entity>, action: Uint32) {

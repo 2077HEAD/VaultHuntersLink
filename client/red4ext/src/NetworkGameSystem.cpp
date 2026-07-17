@@ -5,6 +5,9 @@
 #include "Utils.h"
 
 #include "RED4ext/RTTISystem.hpp"
+#include "RED4ext/TweakDB.hpp"
+#include <map>
+#include <string>
 #include "RED4ext/Scripting/Natives/Generated/EulerAngles.hpp"
 #include "RED4ext/Scripting/Natives/Generated/game/TeleportationFacility.hpp"
 #include "RED4ext/Scripting/Utils.hpp"
@@ -234,6 +237,43 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
         SDK->logger->InfoF(PLUGIN, "diag: movementState size=%zu", m_movementState.size());
     }
 
+    // D1 DISCOVERY (temporary, one-shot): enumerate every AIActionAnimData record via RTTI and
+    // log the animFeature-name vocabulary + a few record hashes per name. These records only
+    // exist in TweakDB (behavior trees reference them by hash — no literals in redscript), so
+    // this dump is the only way to get valid Setup() inputs for ActionAnimationScriptProxy.
+    static bool s_dumpedAnimData = false;
+    if (diagNow && !s_dumpedAnimData && !m_movementState.empty())
+    {
+        s_dumpedAnimData = true;
+        if (auto* recordClass = RED4ext::CRTTISystem::Get()->GetClass("gamedataAIActionAnimData_Record"))
+        {
+            auto records = RED4ext::TweakDB::Get()->GetRecordsByType(recordClass);
+            SDK->logger->InfoF(PLUGIN, "diag: %u AIActionAnimData records total", records.size());
+            std::map<std::string, std::pair<uint32_t, uint64_t>> byFeature; // name -> (count, first record hash)
+            for (const auto& record : records)
+            {
+                RED4ext::CName feature;
+                if (!Red::CallVirtual(record, "AnimFeature", feature))
+                {
+                    continue;
+                }
+                RED4ext::TweakDBID recordId;
+                Red::CallVirtual(record, "GetID", recordId);
+                auto& slot = byFeature[feature.ToString()];
+                if (slot.first == 0)
+                {
+                    slot.second = recordId.value;
+                }
+                ++slot.first;
+            }
+            for (const auto& [name, info] : byFeature)
+            {
+                SDK->logger->InfoF(PLUGIN, "diag: animFeature \"%s\" x%u (e.g. record %llu)", name.c_str(),
+                                   info.first, info.second);
+            }
+        }
+    }
+
     for (auto& [entityId, state] : m_movementState)
     {
         state.timeSinceUpdate += deltaTime;
@@ -258,6 +298,21 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
         {
             SDK->logger->InfoF(PLUGIN, "diag: entity %llu pos=(%.2f, %.2f, %.2f) remaining=%.2f speed=%.2f",
                                entityId.hash, pos.X, pos.Y, pos.Z, remaining, state.speed);
+
+            // D1 PROBE (temporary): every diag tick, launch the "Walk" action anim
+            // (AIActionAnimData record 140240307976, from the RTTI dump) through
+            // ActionAnimationScriptProxy. Success criterion: Setup=true in this log AND
+            // visible full-body anim in the screenshot burst.
+            static int s_actionProbeCount = 0;
+            if (s_actionProbeCount < 40)
+            {
+                ++s_actionProbeCount;
+                const RED4ext::TweakDBID walkAnimData(140240307976ULL);
+                bool setupOk = false;
+                const bool callOk = Red::CallVirtual(this, "TryActionAnim", setupOk, entity.value(), walkAnimData);
+                SDK->logger->InfoF(PLUGIN, "diag: actionAnim probe on %llu callOk=%d setupOk=%d", entityId.hash,
+                                   callOk, setupOk);
+            }
         }
 
         if (remaining < 0.02f || state.speed <= 0.01f)
