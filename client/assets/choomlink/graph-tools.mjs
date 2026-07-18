@@ -56,9 +56,12 @@ function resolveNode(byHandle, n) {
 }
 
 function resolvePath(path) {
-    // "$.Data.RootChunk.foo.0.bar" -> [Elternobjekt, letzter Schlüssel]
+    // "$.foo.0.bar" -> [Elternobjekt, letzter Schlüssel]. Relativ zu RootChunk (rc) — dieselbe
+    // Konvention wie die Pfade, die find-output/stats/find-clips/find-type ausgeben und die
+    // im Anatomie-Doc dokumentiert sind (NICHT relativ zur Datei-Wurzel j, die noch
+    // Header/Data-Hülle trägt).
     const parts = path.replace(/^\$\.?/, '').split('.').filter(Boolean);
-    let cur = j;
+    let cur = rc;
     for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]];
     return [cur, parts[parts.length - 1]];
 }
@@ -131,14 +134,16 @@ if (verb === 'get') {
 
 if (verb === 'set') {
     const [parent, key] = resolvePath(args[0]);
+    const before = JSON.stringify(parent[key]);
     parent[key] = JSON.parse(args[1]);
     fs.writeFileSync(file, JSON.stringify(j));
+    // Rücklesen zur Bestätigung: Datei komplett neu parsen (nicht das In-Memory-Objekt
+    // wiederverwenden), damit der Schreibvorgang selbst verifiziert wird.
     const j2 = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const [p2, k2] = (() => {
-        const parts = args[0].replace(/^\$\.?/, '').split('.').filter(Boolean);
-        let cur = j2.Data ? j2 : j2; // re-parse from scratch, same shape
-        for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]];
-        return [cur, parts[parts.length - 1]];
-    })();
-    console.log('written+reread:', JSON.stringify(p2[k2]).slice(0, 400));
+    const rc2 = j2.Data.RootChunk;
+    const parts = args[0].replace(/^\$\.?/, '').split('.').filter(Boolean);
+    let cur = rc2;
+    for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]];
+    console.log('before:', before.slice(0, 200));
+    console.log('written+reread:', JSON.stringify(cur[parts[parts.length - 1]]).slice(0, 200));
 }
