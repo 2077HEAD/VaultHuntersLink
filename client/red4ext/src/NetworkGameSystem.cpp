@@ -17,12 +17,8 @@
 #include <steam/isteamnetworkingutils.h> // Required, see https://github.com/ValveSoftware/GameNetworkingSockets/issues/171^
 #include <steam/steamnetworkingsockets.h>
 
-#include "RED4ext/Scripting/Natives/Generated/anim/AnimFeature_Crowd.hpp"
-#include "RED4ext/Scripting/Natives/Generated/anim/AnimFeature_CrowdLocomotion.hpp"
-#include "RED4ext/Scripting/Natives/Generated/anim/AnimFeature_Locomotion.hpp"
-#include "RED4ext/Scripting/Natives/Generated/anim/Locomotion_Style.hpp"
+#include "RED4ext/Scripting/Natives/Generated/anim/AnimFeature_PlayerMovement.hpp"
 #include "RED4ext/Scripting/Natives/Generated/ent/AnimInputSetterAnimFeature.hpp"
-#include "RED4ext/Scripting/Natives/Generated/move/LocomotionAction.hpp"
 
 #include "serverbound/AuthPacketsServerBound.h"
 #include "serverbound/WorldPacketsServerBound.h"
@@ -407,65 +403,23 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
 
 void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& entity, const MovementState& state)
 {
-    // (Feed re-enabled 2026-07-16: the frozen-position regression was NOT the feed — it was
-    // TeleportationFacility no-opping on puppets; KinematicMove now moves puppets via
-    // AITeleportCommand + ForceTickNextFrame. This feed is the anim-side experiment on the
-    // stripped template.)
-    // Both feature classes are native-only (not script-exposed); we build them here and queue
-    // the same AnimInputSetterAnimFeature event the game's redscript ApplyFeature helper
-    // queues. Input names, classes AND value semantics verified against the WolvenKit dump of
-    // base\gameplay\anim_graphs\humanoid.animgraph: the graph's state transitions test
-    // "locomotion.action" against move::LocomotionAction (Greater 1 == moving; 5=Start,
-    // 6=Move, 7=Stop, 2=Idle) and "locomotion.style" against anim::Locomotion_Style
-    // (2=LS_Walk, 3=LS_Jog, 4=LS_Sprint).
-    const bool moving = state.speed > 0.1f;
-    const auto action = static_cast<int32_t>(moving ? RED4ext::move::LocomotionAction::Move
-                                                    : RED4ext::move::LocomotionAction::Idle);
-    auto style = static_cast<int32_t>(RED4ext::anim::Locomotion_Style::LS_Idle);
-    if (state.speed > 6.0f)
+    // D3 (2026-07-18): feeds ONLY our custom graph input "choomlink_locomotion" — no game
+    // system writes this name (verified: it does not exist in the vanilla humanoid.animgraph
+    // feature list), so there is no writer race by construction. The vanilla "locomotion"/
+    // "crowd_locomotion"/"crowdAnimFeature" feed from iterations 1-2 is retired: our cloned
+    // graph's gate (animAnimNode_BlendOverride, weight fixed 1) reads exclusively from our
+    // own branch now, not from the vanilla state machine those features used to drive.
+    auto feature = Red::MakeScriptedHandle<RED4ext::anim::AnimFeature_PlayerMovement>("animAnimFeature_PlayerMovement");
+    if (!feature)
     {
-        style = static_cast<int32_t>(RED4ext::anim::Locomotion_Style::LS_Sprint);
+        return;
     }
-    else if (state.speed > 2.5f)
-    {
-        style = static_cast<int32_t>(RED4ext::anim::Locomotion_Style::LS_Jog);
-    }
-    else if (moving)
-    {
-        style = static_cast<int32_t>(RED4ext::anim::Locomotion_Style::LS_Walk);
-    }
-
-    auto locoFeature = Red::MakeScriptedHandle<RED4ext::anim::AnimFeature_Locomotion>("animAnimFeature_Locomotion");
-    if (locoFeature)
-    {
-        locoFeature->action = action;
-        locoFeature->style = style;
-        locoFeature->speedProgress = moving ? 1.0f : 0.0f;
-        const RED4ext::Handle<RED4ext::anim::AnimFeature> locoBase = locoFeature;
-        Red::CallVirtual(this, "ApplyAnimFeature", entity, RED4ext::CName("locomotion"), locoBase);
-    }
-
-    auto crowdFeature = Red::MakeScriptedHandle<RED4ext::anim::AnimFeature_CrowdLocomotion>("animAnimFeature_CrowdLocomotion");
-    if (crowdFeature)
-    {
-        crowdFeature->speed = state.speed;
-        crowdFeature->isCrowd = true;
-        const RED4ext::Handle<RED4ext::anim::AnimFeature> crowdBase = crowdFeature;
-        Red::CallVirtual(this, "ApplyAnimFeature", entity, RED4ext::CName("crowd_locomotion"), crowdBase);
-    }
-
-    // The graph's crowd-branch state gates test crowdAnimFeature.locomotionState — and for a
-    // non-crowd puppet no native system writes this feature, so our value stands unopposed
-    // (unlike "locomotion", which the resident AI movement stack rewrites every tick).
-    auto crowdStateFeature = Red::MakeScriptedHandle<RED4ext::anim::AnimFeature_Crowd>("animAnimFeature_Crowd");
-    if (crowdStateFeature)
-    {
-        crowdStateFeature->locomotionState = moving ? 1 : 0;
-        crowdStateFeature->speedType = moving ? 1 : 0;
-        crowdStateFeature->animScale = 1.0f;
-        const RED4ext::Handle<RED4ext::anim::AnimFeature> crowdStateBase = crowdStateFeature;
-        Red::CallVirtual(this, "ApplyAnimFeature", entity, RED4ext::CName("crowdAnimFeature"), crowdStateBase);
-    }
+    feature->speed = state.speed;
+    // Direction relative to facing, degrees, -180..180 (0 = forward). Forward-only in stage
+    // 3 (1D blend has no direction dimension yet) — calibrated in stage 4 (Task 6).
+    feature->movementDirectionHorizontalAngle = 0.0f;
+    const RED4ext::Handle<RED4ext::anim::AnimFeature> base = feature;
+    Red::CallVirtual(this, "ApplyAnimFeature", entity, RED4ext::CName("choomlink_locomotion"), base);
 }
 
 void NetworkGameSystem::PollIncomingMessages()
