@@ -195,18 +195,29 @@ function floatInputNode(propName, debugSuffix) {
 
 const speedInputNode = floatInputNode('speed', 'speed');
 
-// --- Stufe 4: Richtungs-Dimension (2026-07-18) -----------------------------------------
-// Pro Tempo-Stufe (walk/jog/sprint) ein eigener Richtungs-Blend (radialBlending=1, Winkel
-// -180..180, choomlink_locomotion.movementDirectionHorizontalAngle als Parameter) über die
-// pro Stufe tatsächlich vorhandenen Richtungs-Zyklen (Clip-Vokabular, Anatomie-Doc/
-// find-clips verifiziert): walk hat 0/left/right/180, jog hat 0/left/right/180, sprint nur
-// 0/left/right (kein Backpedal-Sprint im Vanilla-Set). Konvention (zu kalibrieren, Step 2):
-// left=-90°, right=+90°. Idle bleibt richtungslos (ein einzelner Clip, keine Blend-Kosten
-// im Stillstand).
-function directionBlendNode(tierDebugName, clipsByAngle) {
+// --- Stufe 4: Richtungs-Dimension (2026-07-18, korrigiert 2026-07-27) ------------------
+// Erste Fassung erzeugte am Ort ±90° eine Bind-Pose (Beine kerzengerade, Arme waagerecht
+// abgespreizt) — in-game am 2026-07-27 belegt, während Richtung 0° einen sauberen
+// Gehzyklus lieferte. Ursachenanalyse gegen die Vanilla-Richtungs-Blends (Skript
+// scratchpad/dirdetail.mjs, Abfrage über den gebauten Graphen) ergab fünf Abweichungen:
+//   1. walk_180 / jog_180 haben KEINEN einzigen Vanilla-SkAnim-Knoten — es gibt im
+//      NPC-Clip-Satz gar keinen Backpedal-Zyklus. Ein nicht auflösbarer Clip im Blend
+//      erklärt die Bind-Pose. (walk_090/walk_270 aus dem Anatomie-Doc existieren
+//      ebenfalls nicht als Clips — das waren Strings, keine spielbaren Animationen.)
+//   2. min/maxWeight muss dem tatsächlichen Winkelbereich der Clips entsprechen
+//      (Vanilla: walk ±90, jog/sprint ±45) — nicht pauschal ±180.
+//   3. radialBlending ist bei allen drei Vanilla-Blends 0, nicht 1.
+//   4. timeWarpingEnabled=1 hält die Clips im Blend auf gleicher Schrittphase.
+//   5. syncMethod=animSyncMethodByProgress (walk/jog) synchronisiert den Fortschritt.
+// Folge für den Umfang: echte Seitwärts-Zyklen (±90°) gibt es NUR im Walk-Tempo. Jog und
+// Sprint besitzen lediglich ±45°-Varianten (Lean, kein Strafe), Rückwärts gar nicht —
+// jenseits des Bereichs klemmt der Blend auf den äußersten Clip, wie bei Vanilla.
+// Konvention (Vorzeichen noch zu kalibrieren): left=negativ, right=positiv.
+function directionBlendNode(tierDebugName, clipsByAngle, useSyncMethod = true) {
     const dirInput = floatInputNode('movementDirectionHorizontalAngle', tierDebugName + '_dir');
     const sorted = [...clipsByAngle].sort((a, b) => a.angle - b.angle);
     const clipNodes = sorted.map((c) => ({ HandleId: String(nextId++), Data: skAnimNode(c.clip, 'None') }));
+    const range = Math.max(...sorted.map((c) => Math.abs(c.angle)));
     const blend = {
         HandleId: String(nextId++),
         Data: {
@@ -216,14 +227,16 @@ function directionBlendNode(tierDebugName, clipsByAngle) {
             id: 4294967295,
             inputNodes: clipNodes.map((n) => ({ $type: 'animPoseLink', node: n })),
             inputValues: sorted.map((c) => c.angle),
-            maxWeight: 180,
-            minWeight: -180,
+            maxWeight: range,
+            minWeight: -range,
             motionProvider: null,
             poseInfoLogger: null,
-            radialBlending: 1, // -180/180 sind derselbe Punkt — Wraparound-Interpolation
+            radialBlending: 0, // wie Vanilla: linearer 1D-Blend, kein Wraparound
             sortedInputValues: sorted.map((c) => c.angle),
-            syncMethod: null,
-            timeWarpingEnabled: 0,
+            syncMethod: useSyncMethod
+                ? { HandleId: String(nextId++), Data: { $type: 'animSyncMethodByProgress' } }
+                : null,
+            timeWarpingEnabled: 1,
             visAxes: 0, visMask: null, visNames: 0, visPostPose: 0,
             visPostPoseColor: { $type: 'Color', Alpha: 0, Blue: 0, Green: 0, Red: 0 },
             visPrePose: 0,
@@ -236,18 +249,20 @@ function directionBlendNode(tierDebugName, clipsByAngle) {
     return blend;
 }
 
+// Winkelbereiche exakt wie die Vanilla-Pendants: walk ±90 (echte Seitwärts-Zyklen),
+// jog/sprint ±45 (nur Lean-Varianten). sprint ohne syncMethod — auch das wie Vanilla.
 const walkClip = directionBlendNode('walk', [
     { clip: 'walk_left', angle: -90 }, { clip: 'walk_0', angle: 0 },
-    { clip: 'walk_right', angle: 90 }, { clip: 'walk_180', angle: 180 },
+    { clip: 'walk_right', angle: 90 },
 ]);
 const jogClip = directionBlendNode('jog', [
-    { clip: 'jog_left', angle: -90 }, { clip: 'jog_0', angle: 0 },
-    { clip: 'jog_right', angle: 90 }, { clip: 'jog_180', angle: 180 },
+    { clip: 'jog_left', angle: -45 }, { clip: 'jog_0', angle: 0 },
+    { clip: 'jog_right', angle: 45 },
 ]);
 const sprintClip = directionBlendNode('sprint', [
-    { clip: 'sprint_left', angle: -90 }, { clip: 'sprint_0', angle: 0 },
-    { clip: 'sprint_right', angle: 90 },
-]);
+    { clip: 'sprint_left', angle: -45 }, { clip: 'sprint_0', angle: 0 },
+    { clip: 'sprint_right', angle: 45 },
+], false);
 
 // BlendMultiple: 1D-Blend über inputValues als Tempo-Stützstellen (Plan-Schwellen 0/1.5/
 // 3.5/6 m/s). Feldmuster von einer echten Vanilla-BlendMultiple-Instanz übernommen
