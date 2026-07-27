@@ -213,11 +213,17 @@ const speedInputNode = floatInputNode('speed', 'speed');
 // Sprint besitzen lediglich ±45°-Varianten (Lean, kein Strafe), Rückwärts gar nicht —
 // jenseits des Bereichs klemmt der Blend auf den äußersten Clip, wie bei Vanilla.
 // Konvention (Vorzeichen noch zu kalibrieren): left=negativ, right=positiv.
-function directionBlendNode(tierDebugName, clipsByAngle, useSyncMethod = true) {
+// rangeOverride=180 heißt: der Blend deckt den vollen Kreis ab (Rückwärts ist dabei) —
+// dann MUSS radialBlending=1 sein, damit -180 und +180 als derselbe Punkt gelten und der
+// Übergang Rückwärts→Seitwärts nicht quer durch alle Zwischenclips läuft. Reicht der Blend
+// nur bis ±90 (kein Rückwärts-Clip), ist der lineare Vanilla-Fall mit radialBlending=0
+// richtig.
+function directionBlendNode(tierDebugName, clipsByAngle, useSyncMethod = true, rangeOverride = null) {
     const dirInput = floatInputNode('movementDirectionHorizontalAngle', tierDebugName + '_dir');
     const sorted = [...clipsByAngle].sort((a, b) => a.angle - b.angle);
     const clipNodes = sorted.map((c) => ({ HandleId: String(nextId++), Data: skAnimNode(c.clip, 'None') }));
-    const range = Math.max(...sorted.map((c) => Math.abs(c.angle)));
+    const range = rangeOverride ?? Math.max(...sorted.map((c) => Math.abs(c.angle)));
+    const fullCircle = range >= 180;
     const blend = {
         HandleId: String(nextId++),
         Data: {
@@ -231,7 +237,7 @@ function directionBlendNode(tierDebugName, clipsByAngle, useSyncMethod = true) {
             minWeight: -range,
             motionProvider: null,
             poseInfoLogger: null,
-            radialBlending: 0, // wie Vanilla: linearer 1D-Blend, kein Wraparound
+            radialBlending: fullCircle ? 1 : 0,
             sortedInputValues: sorted.map((c) => c.angle),
             syncMethod: useSyncMethod
                 ? { HandleId: String(nextId++), Data: { $type: 'animSyncMethodByProgress' } }
@@ -249,20 +255,29 @@ function directionBlendNode(tierDebugName, clipsByAngle, useSyncMethod = true) {
     return blend;
 }
 
-// Winkelbereiche exakt wie die Vanilla-Pendants: walk ±90 (echte Seitwärts-Zyklen),
-// jog/sprint ±45 (nur Lean-Varianten). sprint ohne syncMethod — auch das wie Vanilla.
+// Clip-Namen NICHT mehr aus dem Graphen geraten, sondern aus den tatsächlichen
+// .anims-Sets belegt (2026-07-27, Skript scratchpad/animnames.mjs über die mit
+// WolvenKit extrahierten Sets). Befund:
+//   wa_gang_unarmed_locomotion_combat  : walk_0, walk_090, walk_180, walk_270 (+Übergänge)
+//   wa_gang_unarmed_locomotion_relaxed : walk_0, walk_180, sprint_0 (KEINE Seitwärts-Clips)
+//   generic_average_female_locomotion  : walk_0, walk_180, sprint_0
+//   wa_judy_unarmed_locomotion_relaxed : walk_0, walk_180
+//   ...searching / ...stealth / exploration_relaxed / judy_handgun_combat: kein Seitwärts
+// Zwei Konsequenzen, beide in-game am 2026-07-27 belegt:
+//   * walk_left/walk_right/jog_left/jog_right/sprint_left/sprint_right existieren in
+//     KEINEM Set — genau darum lieferte Richtung ±90° eine Bind-Pose. Die echten
+//     Richtungsnamen sind walk_090 / walk_180 / walk_270 (Anatomie-Doc hatte recht).
+//   * jog_* kommt in keinem der geprüften Sets vor. Die Jog-Stufe bekommt deshalb
+//     keinen Richtungs-Blend mehr, sondern bleibt ein einzelner Clip — genauso Sprint,
+//     wo nur sprint_0 belegt ist.
+// Damit hat ausschließlich die Walk-Stufe echte Richtungsabdeckung — dafür aber alle
+// vier Himmelsrichtungen, Rückwärtslaufen eingeschlossen.
 const walkClip = directionBlendNode('walk', [
-    { clip: 'walk_left', angle: -90 }, { clip: 'walk_0', angle: 0 },
-    { clip: 'walk_right', angle: 90 },
-]);
-const jogClip = directionBlendNode('jog', [
-    { clip: 'jog_left', angle: -45 }, { clip: 'jog_0', angle: 0 },
-    { clip: 'jog_right', angle: 45 },
-]);
-const sprintClip = directionBlendNode('sprint', [
-    { clip: 'sprint_left', angle: -45 }, { clip: 'sprint_0', angle: 0 },
-    { clip: 'sprint_right', angle: 45 },
-], false);
+    { clip: 'walk_270', angle: -90 }, { clip: 'walk_0', angle: 0 },
+    { clip: 'walk_090', angle: 90 }, { clip: 'walk_180', angle: 180 },
+], true, 180);
+const jogClip = { HandleId: String(nextId++), Data: skAnimNode('jog_0', 'None') };
+const sprintClip = { HandleId: String(nextId++), Data: skAnimNode('sprint_0', 'None') };
 
 // BlendMultiple: 1D-Blend über inputValues als Tempo-Stützstellen (Plan-Schwellen 0/1.5/
 // 3.5/6 m/s). Feldmuster von einer echten Vanilla-BlendMultiple-Instanz übernommen
@@ -326,4 +341,7 @@ walk(rc2, (o) => {
     if (o.$type === 'animAnimNode_FloatInput' && o.debugName && /_dir$/.test(String(o.debugName.$value))) dirFloatInputCount++;
 });
 console.log('Rückgelesen: choomlink_speed_blend BlendMultiple-Knoten =', blendCount, ', choomlink_-Clip-Knoten =', clipCount, ', choomlink_speed FloatInput-Knoten =', floatInputCount);
-console.log('Rückgelesen: Richtungs-Blend-Knoten (walk/jog/sprint) =', dirBlendCount, '(erwartet 3), Richtungs-FloatInput-Knoten =', dirFloatInputCount, '(erwartet 3)');
+// Nur noch die Walk-Stufe hat einen Richtungs-Blend (Jog/Sprint besitzen im Clip-Satz
+// keine Richtungsvarianten) → 1 Blend, 1 Richtungs-FloatInput, 7 Clip-Knoten
+// (idle + walk_270/0/090/180 + jog_0 + sprint_0).
+console.log('Rückgelesen: Richtungs-Blend-Knoten (nur walk) =', dirBlendCount, '(erwartet 1), Richtungs-FloatInput-Knoten =', dirFloatInputCount, '(erwartet 1)');
