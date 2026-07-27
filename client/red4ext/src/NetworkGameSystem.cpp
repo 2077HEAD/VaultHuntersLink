@@ -415,9 +415,35 @@ void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& enti
         return;
     }
     feature->speed = state.speed;
-    // Direction relative to facing, degrees, -180..180 (0 = forward). Forward-only in stage
-    // 3 (1D blend has no direction dimension yet) — calibrated in stage 4 (Task 6).
-    feature->movementDirectionHorizontalAngle = 0.0f;
+
+    // Stage 4 (Task 6): direction relative to facing, degrees, -180..180 (0 = forward,
+    // -90 = strafe left, +90 = strafe right, 180 = backpedal — matches the walk/jog/sprint
+    // direction-blend clip angles in build-graph.mjs). Calibrated in-game (1-bot circle):
+    // the bot's targetYaw and its velocity direction (atan2) are already in the same world
+    // frame (the circle pattern faces its direction of travel), so plain subtraction gives
+    // ~0 deg for straight-ahead motion — the initial "-90" offset guess was wrong (measured
+    // a constant -91 deg bias, confirming targetYaw needed no extra rotation).
+    float rel = 0.0f;
+    if (state.speed > 0.05f)
+    {
+        const float moveAngleWorld = std::atan2(state.velocity.Y, state.velocity.X) * 57.29578f;
+        rel = moveAngleWorld - state.targetYaw;
+        while (rel > 180.0f) rel -= 360.0f;
+        while (rel < -180.0f) rel += 360.0f;
+    }
+    feature->movementDirectionHorizontalAngle = rel;
+
+    // DIAG CALIBRATION (temporary): confirm the angle convention in-game before trusting it.
+    // Throttled by call count (this runs once per moving puppet per frame) rather than a
+    // time estimate, since DriveLocomotionFeed has no direct access to a real deltaTime.
+    static int s_dirDiagCount = 0;
+    if (s_dirDiagCount < 60)
+    {
+        ++s_dirDiagCount;
+        SDK->logger->InfoF(PLUGIN, "diag: dir angle=%.1f speed=%.2f targetYaw=%.1f vel=(%.2f,%.2f)", rel,
+                           state.speed, state.targetYaw, state.velocity.X, state.velocity.Y);
+    }
+
     const RED4ext::Handle<RED4ext::anim::AnimFeature> base = feature;
     Red::CallVirtual(this, "ApplyAnimFeature", entity, RED4ext::CName("choomlink_locomotion"), base);
 }

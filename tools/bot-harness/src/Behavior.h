@@ -22,13 +22,17 @@ public:
         Random,
         Boundary,
         Static,
+        Strafe,
     };
 
     Behavior(const Pattern pattern, const Vector3 center, const int botIndex, const float boundaryDistance = 440.0f)
         : m_pattern(pattern), m_center(center),
           m_radius(5.0f + static_cast<float>(botIndex)),
-          // distribute bots around the circle / center so they don't spawn inside each other
-          m_angle(static_cast<float>(botIndex) * 0.7f),
+          // Strafe: SHARED facing for every bot (a straight line of bots all facing the same
+          // way is far easier to screenshot-compare than bots at different angles/facings
+          // around a circle — verification feedback 2026-07-25). All other patterns keep the
+          // per-bot angular offset so they don't spawn inside each other.
+          m_angle(pattern == Pattern::Strafe ? 0.0f : static_cast<float>(botIndex) * 0.7f),
           m_boundaryDistance(boundaryDistance),
           m_rng(1337 + botIndex)
     {
@@ -38,6 +42,15 @@ public:
             // server track us before we move out, corrupting the spawn/despawn counters.
             m_position = { m_center.x + m_boundaryDistance * std::cos(m_angle),
                            m_center.y + m_boundaryDistance * std::sin(m_angle), m_center.z };
+        }
+        else if (pattern == Pattern::Strafe)
+        {
+            // Line formation: bots spread along X, fixed distance from center along Y, all
+            // facing the same yaw — a clean row instead of bots circling at different angles.
+            constexpr float LINE_SPACING = 2.5f;
+            m_lineAnchor = { m_center.x + (static_cast<float>(botIndex) - 1.5f) * LINE_SPACING,
+                             m_center.y + 6.0f, m_center.z };
+            m_position = m_lineAnchor;
         }
         else
         {
@@ -61,6 +74,8 @@ public:
             return TickBoundary(dt);
         case Pattern::Static:
             return { m_position, std::fmod(m_heading * 57.29578f, 360.0f) };
+        case Pattern::Strafe:
+            return TickStrafe(dt);
         case Pattern::Random:
         default:
             return TickRandom(dt);
@@ -122,6 +137,23 @@ private:
         return { m_position, std::fmod(yaw, 360.0f) };
     }
 
+    // Sideways oscillation at fixed facing: position pendulums on the axis perpendicular to
+    // the (fixed) view yaw — the remote puppet must play strafe cycles, not turn (Task 6
+    // Step 3, 8-way direction verification).
+    Pose TickStrafe(const float dt)
+    {
+        // Oscillate around THIS bot's own line-formation anchor (m_lineAnchor, set once at
+        // spawn) — not the shared m_center. Using m_center here was the bug that collapsed
+        // all bots onto the same spot after the first tick (found 2026-07-25: the diag log
+        // showed every bot at an identical position once strafing started).
+        m_boundaryPhase += (WALK_SPEED / 3.0f) * dt;
+        const float offset = 3.0f * std::sin(m_boundaryPhase);
+        const float viewYawRad = m_angle; // fixed per-bot facing
+        m_position = { m_lineAnchor.x + offset * std::cos(viewYawRad + 1.5707963f),
+                       m_lineAnchor.y + offset * std::sin(viewYawRad + 1.5707963f), m_lineAnchor.z };
+        return { m_position, std::fmod(viewYawRad * 57.29578f, 360.0f) };
+    }
+
     Pattern m_pattern;
     Vector3 m_center;
     float m_radius;
@@ -129,6 +161,7 @@ private:
     float m_boundaryDistance;
     float m_boundaryPhase = 0.0f;
     Vector3 m_position {};
+    Vector3 m_lineAnchor {}; // Strafe pattern: this bot's fixed line-formation spot
     float m_heading = 0.0f;
     float m_timeToNewHeading = 0.0f;
     std::mt19937 m_rng;

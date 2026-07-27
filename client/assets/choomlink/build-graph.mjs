@@ -168,31 +168,86 @@ function skAnimNode(clipName, loopEventName) {
 }
 
 const idleClip = { HandleId: String(nextId++), Data: skAnimNode('idle_stand', 'idle_end') };
-const walkClip = { HandleId: String(nextId++), Data: skAnimNode('walk_0', 'None') };
-const jogClip = { HandleId: String(nextId++), Data: skAnimNode('jog_0', 'None') };
-const sprintClip = { HandleId: String(nextId++), Data: skAnimNode('sprint_0', 'None') };
 
-// FloatInput liest choomlink_locomotion.speed — Mechanismus verifiziert (Anatomie-Doc):
-// group = Feature-Name, name = Feature-Eigenschaft (Beispiel im Dump: group="crowd_locomotion",
-// name="speed"). Kein Graph-Node "schreibt" das Feature — nur unser C++-Feed tut das.
-const speedInputNode = {
-    HandleId: String(nextId++),
-    Data: {
-        $type: 'animAnimNode_FloatInput',
-        debugInput: 0,
-        debugName: { $type: 'CName', $storage: 'string', $value: 'choomlink_speed' },
-        group: { $type: 'CName', $storage: 'string', $value: 'choomlink_locomotion' },
-        id: 4294967295,
-        name: { $type: 'CName', $storage: 'string', $value: 'speed' },
-        poseInfoLogger: null,
-        visAxes: 0, visMask: null, visNames: 0, visPostPose: 0,
-        visPostPoseColor: { $type: 'Color', Alpha: 0, Blue: 0, Green: 0, Red: 0 },
-        visPrePose: 0,
-        visPrePoseColor: { $type: 'Color', Alpha: 0, Blue: 0, Green: 0, Red: 0 },
-        visRigPartMask: { $type: 'CName', $storage: 'string', $value: 'None' },
-        visWhenActive: 0,
-    },
-};
+// FloatInput-Fabrik: group = Feature-Name, name = Feature-Eigenschaft (Mechanismus
+// verifiziert, Anatomie-Doc — Beispiel im Dump: group="crowd_locomotion", name="speed").
+// Kein Graph-Node "schreibt" ein Feature — nur unser C++-Feed tut das.
+function floatInputNode(propName, debugSuffix) {
+    return {
+        HandleId: String(nextId++),
+        Data: {
+            $type: 'animAnimNode_FloatInput',
+            debugInput: 0,
+            debugName: { $type: 'CName', $storage: 'string', $value: 'choomlink_' + debugSuffix },
+            group: { $type: 'CName', $storage: 'string', $value: 'choomlink_locomotion' },
+            id: 4294967295,
+            name: { $type: 'CName', $storage: 'string', $value: propName },
+            poseInfoLogger: null,
+            visAxes: 0, visMask: null, visNames: 0, visPostPose: 0,
+            visPostPoseColor: { $type: 'Color', Alpha: 0, Blue: 0, Green: 0, Red: 0 },
+            visPrePose: 0,
+            visPrePoseColor: { $type: 'Color', Alpha: 0, Blue: 0, Green: 0, Red: 0 },
+            visRigPartMask: { $type: 'CName', $storage: 'string', $value: 'None' },
+            visWhenActive: 0,
+        },
+    };
+}
+
+const speedInputNode = floatInputNode('speed', 'speed');
+
+// --- Stufe 4: Richtungs-Dimension (2026-07-18) -----------------------------------------
+// Pro Tempo-Stufe (walk/jog/sprint) ein eigener Richtungs-Blend (radialBlending=1, Winkel
+// -180..180, choomlink_locomotion.movementDirectionHorizontalAngle als Parameter) über die
+// pro Stufe tatsächlich vorhandenen Richtungs-Zyklen (Clip-Vokabular, Anatomie-Doc/
+// find-clips verifiziert): walk hat 0/left/right/180, jog hat 0/left/right/180, sprint nur
+// 0/left/right (kein Backpedal-Sprint im Vanilla-Set). Konvention (zu kalibrieren, Step 2):
+// left=-90°, right=+90°. Idle bleibt richtungslos (ein einzelner Clip, keine Blend-Kosten
+// im Stillstand).
+function directionBlendNode(tierDebugName, clipsByAngle) {
+    const dirInput = floatInputNode('movementDirectionHorizontalAngle', tierDebugName + '_dir');
+    const sorted = [...clipsByAngle].sort((a, b) => a.angle - b.angle);
+    const clipNodes = sorted.map((c) => ({ HandleId: String(nextId++), Data: skAnimNode(c.clip, 'None') }));
+    const blend = {
+        HandleId: String(nextId++),
+        Data: {
+            $type: 'animAnimNode_BlendMultiple',
+            debug: 0,
+            debugName: { $type: 'CName', $storage: 'string', $value: 'choomlink_' + tierDebugName + '_dir_blend' },
+            id: 4294967295,
+            inputNodes: clipNodes.map((n) => ({ $type: 'animPoseLink', node: n })),
+            inputValues: sorted.map((c) => c.angle),
+            maxWeight: 180,
+            minWeight: -180,
+            motionProvider: null,
+            poseInfoLogger: null,
+            radialBlending: 1, // -180/180 sind derselbe Punkt — Wraparound-Interpolation
+            sortedInputValues: sorted.map((c) => c.angle),
+            syncMethod: null,
+            timeWarpingEnabled: 0,
+            visAxes: 0, visMask: null, visNames: 0, visPostPose: 0,
+            visPostPoseColor: { $type: 'Color', Alpha: 0, Blue: 0, Green: 0, Red: 0 },
+            visPrePose: 0,
+            visPrePoseColor: { $type: 'Color', Alpha: 0, Blue: 0, Green: 0, Red: 0 },
+            visRigPartMask: { $type: 'CName', $storage: 'string', $value: 'None' },
+            visWhenActive: 0,
+            weightNode: { $type: 'animFloatLink', node: dirInput },
+        },
+    };
+    return blend;
+}
+
+const walkClip = directionBlendNode('walk', [
+    { clip: 'walk_left', angle: -90 }, { clip: 'walk_0', angle: 0 },
+    { clip: 'walk_right', angle: 90 }, { clip: 'walk_180', angle: 180 },
+]);
+const jogClip = directionBlendNode('jog', [
+    { clip: 'jog_left', angle: -90 }, { clip: 'jog_0', angle: 0 },
+    { clip: 'jog_right', angle: 90 }, { clip: 'jog_180', angle: 180 },
+]);
+const sprintClip = directionBlendNode('sprint', [
+    { clip: 'sprint_left', angle: -90 }, { clip: 'sprint_0', angle: 0 },
+    { clip: 'sprint_right', angle: 90 },
+]);
 
 // BlendMultiple: 1D-Blend über inputValues als Tempo-Stützstellen (Plan-Schwellen 0/1.5/
 // 3.5/6 m/s). Feldmuster von einer echten Vanilla-BlendMultiple-Instanz übernommen
@@ -247,10 +302,13 @@ console.log('Rückgelesen: choomlink_locomotion Feature vorhanden =', hasFeature
 let gateCount = 0;
 walk(rc2, (o) => { if (o.$type === 'animAnimNode_BlendOverride' && o.debugName && o.debugName.$value === 'choomlink_locomotion_gate') gateCount++; });
 console.log('Rückgelesen: choomlink_locomotion_gate BlendOverride-Knoten gefunden =', gateCount);
-let blendCount = 0, clipCount = 0, floatInputCount = 0;
+let blendCount = 0, clipCount = 0, floatInputCount = 0, dirBlendCount = 0, dirFloatInputCount = 0;
 walk(rc2, (o) => {
     if (o.$type === 'animAnimNode_BlendMultiple' && o.debugName && o.debugName.$value === 'choomlink_speed_blend') blendCount++;
     if (o.$type === 'animAnimNode_SkAnim' && o.debugName && String(o.debugName.$value).startsWith('choomlink_')) clipCount++;
     if (o.$type === 'animAnimNode_FloatInput' && o.debugName && o.debugName.$value === 'choomlink_speed') floatInputCount++;
+    if (o.$type === 'animAnimNode_BlendMultiple' && o.debugName && /_dir_blend$/.test(String(o.debugName.$value))) dirBlendCount++;
+    if (o.$type === 'animAnimNode_FloatInput' && o.debugName && /_dir$/.test(String(o.debugName.$value))) dirFloatInputCount++;
 });
 console.log('Rückgelesen: choomlink_speed_blend BlendMultiple-Knoten =', blendCount, ', choomlink_-Clip-Knoten =', clipCount, ', choomlink_speed FloatInput-Knoten =', floatInputCount);
+console.log('Rückgelesen: Richtungs-Blend-Knoten (walk/jog/sprint) =', dirBlendCount, '(erwartet 3), Richtungs-FloatInput-Knoten =', dirFloatInputCount, '(erwartet 3)');
