@@ -23,6 +23,7 @@ public:
         Boundary,
         Static,
         Strafe,
+        Backpedal,
     };
 
     Behavior(const Pattern pattern, const Vector3 center, const int botIndex, const float boundaryDistance = 440.0f)
@@ -32,7 +33,9 @@ public:
           // way is far easier to screenshot-compare than bots at different angles/facings
           // around a circle — verification feedback 2026-07-25). All other patterns keep the
           // per-bot angular offset so they don't spawn inside each other.
-          m_angle(pattern == Pattern::Strafe ? 0.0f : static_cast<float>(botIndex) * 0.7f),
+          m_angle((pattern == Pattern::Strafe || pattern == Pattern::Backpedal)
+                      ? 0.0f
+                      : static_cast<float>(botIndex) * 0.7f),
           m_boundaryDistance(boundaryDistance),
           m_rng(1337 + botIndex)
     {
@@ -43,7 +46,7 @@ public:
             m_position = { m_center.x + m_boundaryDistance * std::cos(m_angle),
                            m_center.y + m_boundaryDistance * std::sin(m_angle), m_center.z };
         }
-        else if (pattern == Pattern::Strafe)
+        else if (pattern == Pattern::Strafe || pattern == Pattern::Backpedal)
         {
             // Line formation: bots spread along X, fixed distance from center along Y, all
             // facing the same yaw — a clean row instead of bots circling at different angles.
@@ -76,6 +79,8 @@ public:
             return { m_position, std::fmod(m_heading * 57.29578f, 360.0f) };
         case Pattern::Strafe:
             return TickStrafe(dt);
+        case Pattern::Backpedal:
+            return TickBackpedal(dt);
         case Pattern::Random:
         default:
             return TickRandom(dt);
@@ -151,6 +156,25 @@ private:
         const float viewYawRad = m_angle; // fixed per-bot facing
         m_position = { m_lineAnchor.x + offset * std::cos(viewYawRad + 1.5707963f),
                        m_lineAnchor.y + offset * std::sin(viewYawRad + 1.5707963f), m_lineAnchor.z };
+        return { m_position, std::fmod(viewYawRad * 57.29578f, 360.0f) };
+    }
+
+    // Oscillates ALONG the (fixed) view yaw instead of across it: half the cycle the bot
+    // walks forwards (direction 0 deg), the other half backwards (direction 180 deg) — while
+    // never turning. Diagnostic counterpart to TickStrafe: walk_0 and walk_180 live in the
+    // relaxed animsets, the lateral walk_090/walk_270 only in the combat set, so this pattern
+    // answers whether a clip fails because of its NAME or because its SET is not loaded
+    // (2026-07-28, D3 Stufe 4).
+    // Observer note: the line anchor sits 6 m along +Y, and motion runs along +/-X, so from
+    // the default --center (= the player's own position) the bot is seen side-on with its
+    // walk direction crossing the view. No center offset needed, unlike Strafe.
+    Pose TickBackpedal(const float dt)
+    {
+        m_boundaryPhase += (WALK_SPEED / 3.0f) * dt;
+        const float offset = 3.0f * std::sin(m_boundaryPhase);
+        const float viewYawRad = m_angle; // fixed facing — the bot never turns
+        m_position = { m_lineAnchor.x + offset * std::cos(viewYawRad),
+                       m_lineAnchor.y + offset * std::sin(viewYawRad), m_lineAnchor.z };
         return { m_position, std::fmod(viewYawRad * 57.29578f, 360.0f) };
     }
 

@@ -272,11 +272,32 @@ function directionBlendNode(tierDebugName, clipsByAngle, useSyncMethod = true, r
 //     wo nur sprint_0 belegt ist.
 // Damit hat ausschließlich die Walk-Stufe echte Richtungsabdeckung — dafür aber alle
 // vier Himmelsrichtungen, Rückwärtslaufen eingeschlossen.
-const walkClip = directionBlendNode('walk', [
-    { clip: 'walk_270', angle: -90 }, { clip: 'walk_0', angle: 0 },
-    { clip: 'walk_090', angle: 90 }, { clip: 'walk_180', angle: 180 },
-], true, 180);
-const jogClip = { HandleId: String(nextId++), Data: skAnimNode('jog_0', 'None') };
+// In-Game-Befund 2026-07-28 (nachdem die Jog-Stufe als Störgröße ausgeschlossen war):
+// walk_0 und walk_180 spielen sauber (Schrittstellung, Armschwung), walk_090/walk_270
+// weiterhin Bind-Pose. Beide Seitwärts-Clips liegen ausschließlich in
+// wa_gang_unarmed_locomotion_combat.anims — dieses Set lädt unsere friedliche Puppet-Entity
+// offenbar nicht. Solange das so ist, dürfen die beiden Clips NICHT im Blend hängen: bei
+// jeder Richtungsumkehr interpoliert der Radial-Blend von 0° nach 180° durch ±90° und
+// blitzt dabei sichtbar die Bind-Pose auf (im Backpedal-Burst als kurzes T-Pose-Zucken an
+// den Umkehrpunkten belegt). Flag auf true stellen, sobald das Combat-Set über die
+// Animation-Setup-Seite der Entity geladen wird — dann ist der volle 4-Wege-Blend da.
+const LATERAL_CLIPS_AVAILABLE = false;
+const walkClip = LATERAL_CLIPS_AVAILABLE
+    ? directionBlendNode('walk', [
+          { clip: 'walk_270', angle: -90 }, { clip: 'walk_0', angle: 0 },
+          { clip: 'walk_090', angle: 90 }, { clip: 'walk_180', angle: 180 },
+      ], true, 180)
+    : directionBlendNode('walk', [
+          { clip: 'walk_0', angle: 0 }, { clip: 'walk_180', angle: 180 },
+      ], true, 180);
+// Jog-Stufe spielt walk_0 statt jog_0 — BESTÄTIGT durch Gegentest 2026-07-28: im
+// Backpedal-Burst trat die Bind-Pose zweimal pro Schwingung auf, also einmal pro Halbwelle
+// bei Höchsttempo (~2,2 m/s) und richtungsunabhängig. Bei 2,2 m/s mischt der Speed-Blend
+// 67 % walk + 33 % jog; jog_* kommt in keinem der acht geprüften .anims-Sets vor. Nach dem
+// Umhängen auf walk_0 zeigten dieselben Frames einen sauberen Gehzyklus. Es gibt für diese
+// Figur schlicht keine Jog-Clips — bis eines gefunden ist, ist walk_0 die ehrlichste
+// Belegung (lieber ein zu langsamer Zyklus als eine Bind-Pose).
+const jogClip = { HandleId: String(nextId++), Data: skAnimNode('walk_0', 'None') };
 const sprintClip = { HandleId: String(nextId++), Data: skAnimNode('sprint_0', 'None') };
 
 // BlendMultiple: 1D-Blend über inputValues als Tempo-Stützstellen (Plan-Schwellen 0/1.5/

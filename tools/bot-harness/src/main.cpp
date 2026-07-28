@@ -93,9 +93,13 @@ bool ParseArgs(const int argc, char** argv, Options& options)
             {
                 options.pattern = Behavior::Pattern::Strafe;
             }
+            else if (std::strcmp(value, "backpedal") == 0)
+            {
+                options.pattern = Behavior::Pattern::Backpedal;
+            }
             else
             {
-                std::fprintf(stderr, "unknown pattern \"%s\" (circle|random|boundary|static|strafe)\n", value);
+                std::fprintf(stderr, "unknown pattern \"%s\" (circle|random|boundary|static|strafe|backpedal)\n", value);
                 return false;
             }
         }
@@ -131,7 +135,7 @@ bool ParseArgs(const int argc, char** argv, Options& options)
         {
             std::fprintf(stderr,
                          "usage: bot-harness [--server 127.0.0.1] [--port 1337] [--count 8]\n"
-                         "                   [--pattern circle|random|boundary|static|strafe] [--center x,y,z] [--hz 10]\n"
+                         "                   [--pattern circle|random|boundary|static|strafe|backpedal] [--center x,y,z] [--hz 10]\n"
                          "                   [--jump-every <seconds>] [--distance <m, boundary pattern>]\n");
             return false;
         }
@@ -185,6 +189,7 @@ int main(const int argc, char** argv)
                               : options.pattern == Behavior::Pattern::Boundary ? "boundary"
                               : options.pattern == Behavior::Pattern::Static   ? "static"
                               : options.pattern == Behavior::Pattern::Strafe   ? "strafe"
+                              : options.pattern == Behavior::Pattern::Backpedal ? "backpedal"
                                                                                : "random";
     std::printf("bot-harness: %d bot(s) -> %s, pattern %s, %.0f Hz, center (%.1f, %.1f, %.1f)\n", options.count,
                 connectionString, patternName, options.hz, options.center.x, options.center.y, options.center.z);
