@@ -61,6 +61,21 @@ public class PlayerPacketHandler
     protected void HandlePositionUpdate(GameServer server, EMessageTypeServerbound messageType, byte channelId,
         uint connectionId, PlayerPositionUpdate content)
     {
+        // diag (2026-07-29, choomlink-7jcw): the client already sends yaw on every position
+        // update (used below for entity.Yaw) but it was never logged. This is the only
+        // engine-native channel we have for the REAL player's current camera facing (bots
+        // report their own yaw via their Behavior pattern, not via reading anything back).
+        // Logging it lets a deterministic camera-aiming tool read "where am I currently
+        // facing" from this log's tail instead of trial-and-error mouse sweeps. High-frequency
+        // by design (fires on every update, same as the bot diag: lines already used
+        // throughout this project) — consumers should read the LAST matching line, not all of
+        // them.
+        if (_players!.ConnectedPlayers.TryGetValue(connectionId, out var updatingPlayer))
+        {
+            Logger.Trace("diag: pos {0} at ({1:F3}, {2:F3}, {3:F3}) yaw={4:F2}", updatingPlayer.Name,
+                content.worldTransform.x, content.worldTransform.y, content.worldTransform.z, content.yaw);
+        }
+
         // // TODO: Implement differently, don't teleport.
         // TeleportEntity teleportEntity = default;
         // teleportEntity.networkedEntityId = 0;
