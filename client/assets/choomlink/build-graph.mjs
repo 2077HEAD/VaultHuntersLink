@@ -366,3 +366,64 @@ console.log('Rückgelesen: choomlink_speed_blend BlendMultiple-Knoten =', blendC
 // keine Richtungsvarianten) → 1 Blend, 1 Richtungs-FloatInput, 7 Clip-Knoten
 // (idle + walk_270/0/090/180 + jog_0 + sprint_0).
 console.log('Rückgelesen: Richtungs-Blend-Knoten (nur walk) =', dirBlendCount, '(erwartet 1), Richtungs-FloatInput-Knoten =', dirFloatInputCount, '(erwartet 1)');
+
+// --- Lint: Clip-Existenz + Regressions-Diff (2026-07-29, choomlink-i2ic) --------------
+// Auslöser: Commit 0444fbf entfernte versehentlich walk_180 aufgrund einer falschen
+// Annahme ("kein Backpedal-Zyklus existiert") — der Fehler wurde erst einen ganzen
+// In-Game-Verifikationszyklus später bemerkt (b5bce07/27c1f8f). Diese zwei Prüfungen
+// laufen bei JEDEM Build automatisch, ohne das Spiel zu brauchen:
+//   1. Existenz — jeder von uns verdrahtete Clip-Name muss im clip-index.json
+//      (siehe clip-index.mjs) tatsächlich vorkommen. Ein nicht auflösbarer Clip
+//      rendert lautlos eine Bind-Pose; das hier ist ein harter Fehler (Exit 1).
+//   2. Regression — die Menge unserer Clip-Referenzen wird gegen den letzten
+//      committeten Snapshot (graph-clip-baseline.json) verglichen. Änderungen
+//      werden laut ausgegeben (kein harter Fehler — Entfernen/Hinzufügen kann
+//      beabsichtigt sein, z. B. das LATERAL_CLIPS_AVAILABLE-Flag), aber niemand
+//      soll eine Änderung mehr übersehen wie bei walk_180.
+const CLIP_INDEX_FILE = new URL('clip-index.json', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const BASELINE_FILE = new URL('graph-clip-baseline.json', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+
+const referencedClips = new Map(); // clipName -> Set(debugName der SkAnim-Knoten, die ihn nutzen)
+walk(rc2, (o) => {
+    if (o.$type === 'animAnimNode_SkAnim' && o.debugName && String(o.debugName.$value).startsWith('choomlink_')
+        && o.animation && typeof o.animation.$value === 'string') {
+        const clip = o.animation.$value;
+        if (!referencedClips.has(clip)) referencedClips.set(clip, new Set());
+        referencedClips.get(clip).add(o.debugName.$value);
+    }
+});
+const clipNames = [...referencedClips.keys()].sort();
+console.log(`Lint: ${clipNames.length} choomlink_-Clip-Referenzen gefunden:`, clipNames.join(', '));
+
+// 1. Existenz gegen den Clip-Index.
+if (fs.existsSync(CLIP_INDEX_FILE)) {
+    const clipIndex = JSON.parse(fs.readFileSync(CLIP_INDEX_FILE, 'utf8'));
+    const unknown = clipNames.filter((c) => !clipIndex.clips[c]);
+    if (unknown.length > 0) {
+        console.error('\nLINT FEHLGESCHLAGEN — folgende Clips existieren in KEINEM indizierten .anims-Set:');
+        for (const c of unknown) {
+            console.error(`  ${c}  (referenziert von: ${[...referencedClips.get(c)].join(', ')})`);
+        }
+        console.error('\nEntweder ein Tippfehler, oder der Clip existiert für dieses Entity schlicht nicht.');
+        console.error('Vor dem Verdrahten prüfen: node clip-index.mjs query <name>');
+        process.exit(1);
+    }
+    console.log('Lint: alle referenzierten Clips im Index gefunden — OK.');
+} else {
+    console.warn(`Lint: ${CLIP_INDEX_FILE} nicht gefunden — Existenz-Prüfung übersprungen (node clip-index.mjs build ausführen).`);
+}
+
+// 2. Regressions-Diff gegen den letzten committeten Snapshot.
+const baseline = fs.existsSync(BASELINE_FILE) ? JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf8')) : { clips: [] };
+const before = new Set(baseline.clips);
+const after = new Set(clipNames);
+const added = clipNames.filter((c) => !before.has(c));
+const removed = [...before].filter((c) => !after.has(c));
+if (added.length || removed.length) {
+    console.log('\nLint: Änderung gegenüber dem letzten Snapshot:');
+    if (added.length) console.log('  + hinzugekommen:', added.join(', '));
+    if (removed.length) console.log('  - entfernt:      ', removed.join(', '));
+} else {
+    console.log('Lint: keine Änderung gegenüber dem letzten Snapshot.');
+}
+fs.writeFileSync(BASELINE_FILE, JSON.stringify({ clips: clipNames }, null, 2));
