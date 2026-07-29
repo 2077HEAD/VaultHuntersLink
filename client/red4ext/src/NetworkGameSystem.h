@@ -45,6 +45,10 @@ private:
         float timeSinceUpdate = 0.0f;    // accumulated frame dt since the last packet
         bool hasTarget = false;
         bool idleApplied = false;        // idle anim feed sent since arrival (send once)
+        // D3 lateral-clip unlock (2026-07-29): whether the AnimationControllerComponent
+        // SetInputBool calls that make the combat locomotion animset loadable have been sent
+        // for this puppet yet (send once — see DriveLocomotionFeed).
+        bool animSetupInputsSet = false;
         // Virtual point advancing along the network path at `speed`, independent of the
         // puppet's actual position. Teleport commands always target this point, so AI ticks
         // that skip a command don't accumulate lag (the next executed command lands on the
@@ -70,7 +74,7 @@ private:
     void OnNetworkUpdate(RED4ext::FrameInfo& frame_info, RED4ext::JobQueue& job_queue);
     void SetEntityPosition(RED4ext::ent::EntityID entityId, RED4ext::Vector4 worldPosition, float yaw);
     void UpdatePuppetInterpolation(float deltaTime);
-    void DriveLocomotionFeed(const Red::Handle<Red::Entity>& entity, const MovementState& state);
+    void DriveLocomotionFeed(const Red::Handle<Red::Entity>& entity, MovementState& state);
 
 protected:
     void PollIncomingMessages();

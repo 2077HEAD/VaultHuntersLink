@@ -401,8 +401,27 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
     }
 }
 
-void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& entity, const MovementState& state)
+void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& entity, MovementState& state)
 {
+    // D3 lateral-clip unlock (2026-07-29, choomlink-mg7p "Entity statt Graph" step): the
+    // combat locomotion animset (wa_gang_unarmed_locomotion_combat.anims, the one with
+    // walk_090/walk_270 — confirmed via clip-index and direct .ent inspection) is already
+    // listed in puppet_base.ent's "Gameplay Animation Setup" entAnimationSetupExtensionComponent,
+    // gated behind variableNames ["MeleeWeapon", "combatLocomotion", "WeaponRight"]. Those are
+    // AnimationControllerComponent named bool inputs (RTTI-confirmed via nativedb.red4ext.com:
+    // SetInputBool(obj, inputName, value) exists on the same component we already call
+    // StartActionAnim on) — NOT animgraph features, a separate resource-loading gate upstream
+    // of the graph entirely. Setting them true once per puppet should make the combat set
+    // (and therefore walk_090/walk_270) loadable without touching the graph again.
+    if (!state.animSetupInputsSet)
+    {
+        state.animSetupInputsSet = true;
+        Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("MeleeWeapon"), true);
+        Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("combatLocomotion"), true);
+        Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("WeaponRight"), true);
+        SDK->logger->InfoF(PLUGIN, "diag: combat-locomotion animset inputs set on entity");
+    }
+
     // D3 (2026-07-18): feeds ONLY our custom graph input "choomlink_locomotion" — no game
     // system writes this name (verified: it does not exist in the vanilla humanoid.animgraph
     // feature list), so there is no writer race by construction. The vanilla "locomotion"/

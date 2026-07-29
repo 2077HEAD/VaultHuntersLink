@@ -3,6 +3,8 @@
     "idle_stand",
     "sprint_0",
     "walk_0",
-    "walk_180"
+    "walk_090",
+    "walk_180",
+    "walk_270"
   ]
 }
