@@ -1,5 +1,7 @@
 #include "BotClient.h"
 
+#include <cmath>
+
 #include "serverbound/AuthPacketsServerBound.h"
 #include "serverbound/WorldPacketsServerBound.h"
 #include "clientbound/AuthPacketsClientBound.h"
@@ -280,6 +282,15 @@ void BotClient::SendTick(const float dt)
     }
 
     m_lastPose = m_behavior.Tick(dt);
+
+    // Armed bots oscillate their aim pitch (+/-40 deg, ~6.3 s period) so the client-side
+    // upper-body LookAt has something visible to track in screenshot bursts (Task 8).
+    m_elapsed += dt;
+    if (m_weaponTdbid != 0)
+    {
+        m_lastPose.pitch = 40.0f * std::sin(m_elapsed);
+    }
+
     const PlayerPositionUpdate update = { m_lastPose.position, m_lastPose.yaw, m_lastPose.pitch };
     Send(update);
 }

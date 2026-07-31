@@ -65,6 +65,16 @@ private:
         float walkAnimPoll = 0.0f;
     };
     std::map<RED4ext::ent::EntityID, MovementState> m_movementState;
+
+    // Equip packets that arrived before their entity finished its async spawn (measured
+    // 2026-07-31: the track-start snapshot beats the spawn by design). Keyed by
+    // networkedEntityId; the teleport path flushes them once the entity resolves.
+    std::map<uint64_t, EquipItemEntity> m_pendingEquips;
+
+    // Applies one EquipItemEntity to a resolved puppet: redscript TransactionSystem apply +
+    // the movement-state bookkeeping (weaponDrawn, aim LookAt teardown on unequip).
+    void ApplyEquipPacket(const Red::Handle<Red::Entity>& entity, RED4ext::ent::EntityID entityId,
+                          const EquipItemEntity& equip);
     std::map<RED4ext::ent::EntityID, RED4ext::Handle<RED4ext::AICommand>> m_LastTeleportCommand;
     float m_TimeSinceLastPlayerPositionSync;
 

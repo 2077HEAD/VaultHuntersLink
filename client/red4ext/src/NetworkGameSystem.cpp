@@ -607,6 +607,16 @@ void NetworkGameSystem::PollIncomingMessages()
                 break;
             }
 
+            // Flush an equip that arrived before this entity finished spawning (spawn race —
+            // see the eEquipItemEntity case). Runs before the aim check below so weaponDrawn
+            // is already correct for this very packet.
+            if (const auto pendingEquip = m_pendingEquips.find(teleport.networkedEntityId);
+                pendingEquip != m_pendingEquips.end())
+            {
+                ApplyEquipPacket(entity.value(), entityId, pendingEquip->second);
+                m_pendingEquips.erase(pendingEquip);
+            }
+
             const auto positionSource = Cyberverse::Utils::Entity_GetWorldPosition(entity.value());
 
             if (positionSource.X == 0.0 && positionSource.Y == 0.0 && positionSource.Z == 0.0)
@@ -740,8 +750,13 @@ void NetworkGameSystem::PollIncomingMessages()
 
             if (!m_networkedEntitiesLookup.contains(equip_item.networkedEntityId))
             {
-                // Equip for an entity we don't track (spawn race): drop, the track-start
-                // snapshot re-delivers the state once the entity exists (spec §5).
+                // Spawn race (measured 2026-07-31, session 1): the track-start snapshot arrives
+                // milliseconds after SpawnEntity, long before the async entity spawn registers
+                // in the lookup — dropping loses the state for the whole session. Buffer it;
+                // the teleport path applies it once the entity resolves.
+                m_pendingEquips[equip_item.networkedEntityId] = equip_item;
+                SDK->logger->InfoF(PLUGIN, "diag: equip for unknown entity %llu buffered",
+                                   equip_item.networkedEntityId);
                 break;
             }
 
@@ -749,24 +764,13 @@ void NetworkGameSystem::PollIncomingMessages()
             const auto equipEntity = Cyberverse::Utils::GetDynamicEntity(equipEntityId);
             if (!equipEntity.has_value())
             {
+                m_pendingEquips[equip_item.networkedEntityId] = equip_item;
+                SDK->logger->InfoF(PLUGIN, "diag: equip for unresolved entity %llu buffered",
+                                   equip_item.networkedEntityId);
                 break;
             }
 
-            SDK->logger->InfoF(PLUGIN, "diag: entity %llu equip slot %llu item %llu unequip=%d",
-                               equip_item.networkedEntityId, equip_item.slot, equip_item.itemId,
-                               equip_item.isUnequipping ? 1 : 0);
-            Red::CallVirtual(this, "ApplyEquipOnPuppet", equipEntity.value(),
-                             RED4ext::TweakDBID(equip_item.slot), RED4ext::TweakDBID(equip_item.itemId),
-                             equip_item.isUnequipping);
-            auto& equipMoveState = m_movementState[equipEntityId];
-            equipMoveState.weaponDrawn = !equip_item.isUnequipping;
-            if (equip_item.isUnequipping)
-            {
-                Red::CallVirtual(this, "ClearAimOnPuppet", equipEntity.value());
-                // Force a fresh LookAt on the next draw.
-                equipMoveState.lastAimYaw = 999.0f;
-                equipMoveState.lastAimPitch = 999.0f;
-            }
+            ApplyEquipPacket(equipEntity.value(), equipEntityId, equip_item);
         }
         break;
 
@@ -861,6 +865,24 @@ bool NetworkGameSystem::OnGameRestored()
 
     m_gameRestored = true;
     return res;
+}
+
+void NetworkGameSystem::ApplyEquipPacket(const Red::Handle<Red::Entity>& entity,
+                                         const RED4ext::ent::EntityID entityId, const EquipItemEntity& equip)
+{
+    SDK->logger->InfoF(PLUGIN, "diag: entity %llu equip slot %llu item %llu unequip=%d",
+                       equip.networkedEntityId, equip.slot, equip.itemId, equip.isUnequipping ? 1 : 0);
+    Red::CallVirtual(this, "ApplyEquipOnPuppet", entity, RED4ext::TweakDBID(equip.slot),
+                     RED4ext::TweakDBID(equip.itemId), equip.isUnequipping);
+    auto& moveState = m_movementState[entityId];
+    moveState.weaponDrawn = !equip.isUnequipping;
+    if (equip.isUnequipping)
+    {
+        Red::CallVirtual(this, "ClearAimOnPuppet", entity);
+        // Force a fresh LookAt on the next draw.
+        moveState.lastAimYaw = 999.0f;
+        moveState.lastAimPitch = 999.0f;
+    }
 }
 
 void NetworkGameSystem::TrackPlayerPosition(float deltaTime)

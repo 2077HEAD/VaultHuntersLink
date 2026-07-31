@@ -131,6 +131,7 @@ private:
     uint64_t m_equipsReceived = 0;
     uint64_t m_shotsReceived = 0;
     uint64_t m_weaponTdbid = 0;
+    float m_elapsed = 0.0f; // running time, drives the armed-bot aim-pitch oscillation
 
     static std::unordered_map<HSteamNetConnection, BotClient*> s_byConnection;
 };
