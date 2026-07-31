@@ -34,6 +34,7 @@ struct TeleportEntity
     uint64_t networkedEntityId;
     Vector3 targetPosition;
     float yaw; // NPCs (i.e. players) only have a yaw that you can set anyway, not a full rotation.
+    float pitch; // aim pitch in degrees, drives the puppet's upper-body LookAt (not the transform)
 
     inline static void FillMessageFrame(MessageFrame& frame)
     {

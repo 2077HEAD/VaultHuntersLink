@@ -18,6 +18,7 @@ public class Entity
     public ulong RecordId;
     public Vector3 WorldTransform;
     public float Yaw;
+    public float Pitch; // aim pitch in degrees, relayed alongside Yaw in TeleportEntity
     // TODO: Remove and derive from recordId
     public bool IsVehicle;
 

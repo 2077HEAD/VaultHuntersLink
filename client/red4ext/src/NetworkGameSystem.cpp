@@ -654,6 +654,7 @@ void NetworkGameSystem::PollIncomingMessages()
                 moveState.idealValid = true;
                 moveState.targetPosition = worldPosition;
                 moveState.targetYaw = teleport.yaw;
+                moveState.targetPitch = teleport.pitch;
                 moveState.velocity = {};
                 moveState.speed = 0.0f;
                 moveState.timeSinceUpdate = 0.0f;
@@ -674,6 +675,7 @@ void NetworkGameSystem::PollIncomingMessages()
 
             moveState.targetPosition = worldPosition;
             moveState.targetYaw = teleport.yaw;
+            moveState.targetPitch = teleport.pitch;
             moveState.timeSinceUpdate = 0.0f;
             moveState.hasTarget = true;
             moveState.idleApplied = false;
@@ -787,7 +789,20 @@ void NetworkGameSystem::TrackPlayerPosition(float deltaTime)
     const auto orientation = Cyberverse::Utils::Entity_GetWorldOrientation(player);
     const auto [Roll, Pitch, Yaw] = Cyberverse::Utils::Quaternion_ToEulerAngles(orientation);
 
-    const PlayerPositionUpdate position_update = { {  X, Y, Z }, Yaw};
+    // The puppet transform has pitch=0; the aim pitch lives in the FPP camera's local
+    // orientation (player.script:1503 GetFPPCameraComponent, orphans:16656 GetLocalOrientation).
+    float cameraPitch = 0.0f;
+    RED4ext::Handle<RED4ext::IScriptable> fppCamera;
+    Red::CallVirtual(player, "GetFPPCameraComponent", fppCamera);
+    if (fppCamera)
+    {
+        RED4ext::Quaternion camOrientation = {};
+        Red::CallVirtual(fppCamera, "GetLocalOrientation", camOrientation);
+        const auto camAngles = Cyberverse::Utils::Quaternion_ToEulerAngles(camOrientation);
+        cameraPitch = camAngles.Pitch;
+    }
+
+    const PlayerPositionUpdate position_update = { {  X, Y, Z }, Yaw, cameraPitch};
     this->EnqueueMessage(1, position_update);
 }
 

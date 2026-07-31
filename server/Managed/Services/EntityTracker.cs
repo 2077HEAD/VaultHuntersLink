@@ -102,7 +102,8 @@ public class EntityTracker
             {
                 networkedEntityId = entity.NetworkedEntityId,
                 targetPosition = entity.WorldTransform,
-                yaw = entity.Yaw
+                yaw = entity.Yaw,
+                pitch = entity.Pitch
             };
             foreach (var connectionId in remaining)
             {

@@ -40,6 +40,7 @@ private:
     {
         RED4ext::Vector4 targetPosition {};
         float targetYaw = 0.0f;
+        float targetPitch = 0.0f;        // aim pitch (degrees) from TeleportEntity, drives upper-body LookAt
         RED4ext::Vector4 velocity {};    // world units/s toward target
         float speed = 0.0f;              // m/s magnitude, feeds the anim graph
         float timeSinceUpdate = 0.0f;    // accumulated frame dt since the last packet

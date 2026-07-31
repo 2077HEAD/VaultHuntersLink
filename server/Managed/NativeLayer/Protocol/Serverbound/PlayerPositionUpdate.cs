@@ -10,4 +10,5 @@ public struct PlayerPositionUpdate
     // TODO: uint64_t networkTick (relative to the connect in relative server timestamps, because we probably get those batched and relay those batched)
     public Vector3 worldTransform;
     public float yaw;
+    public float pitch; // camera/aim pitch in degrees; puppets only carry yaw in their transform
 }

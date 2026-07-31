@@ -130,7 +130,7 @@ void BotClient::HandleMessage(const void* data, const size_t size)
 
         if (result.auth_result == EAuthResult_Ok)
         {
-            const auto [position, yaw] = m_behavior.Spawn();
+            const auto [position, yaw, pitch] = m_behavior.Spawn();
             std::printf("[%s] login accepted, joining world at (%.1f, %.1f, %.1f)\n", m_name.c_str(), position.x,
                         position.y, position.z);
 
@@ -219,7 +219,7 @@ void BotClient::SendTick(const float dt)
     }
 
     m_lastPose = m_behavior.Tick(dt);
-    const PlayerPositionUpdate update = { m_lastPose.position, m_lastPose.yaw };
+    const PlayerPositionUpdate update = { m_lastPose.position, m_lastPose.yaw, m_lastPose.pitch };
     Send(update);
 }
 

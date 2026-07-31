@@ -72,8 +72,8 @@ public class PlayerPacketHandler
         // them.
         if (_players!.ConnectedPlayers.TryGetValue(connectionId, out var updatingPlayer))
         {
-            Logger.Trace("diag: pos {0} at ({1:F3}, {2:F3}, {3:F3}) yaw={4:F2}", updatingPlayer.Name,
-                content.worldTransform.x, content.worldTransform.y, content.worldTransform.z, content.yaw);
+            Logger.Trace("diag: pos {0} at ({1:F3}, {2:F3}, {3:F3}) yaw={4:F2} pitch={5:F2}", updatingPlayer.Name,
+                content.worldTransform.x, content.worldTransform.y, content.worldTransform.z, content.yaw, content.pitch);
         }
 
         // // TODO: Implement differently, don't teleport.
@@ -109,6 +109,7 @@ public class PlayerPacketHandler
                     
             entity.WorldTransform = content.worldTransform;
             entity.Yaw = content.yaw;
+            entity.Pitch = content.pitch;
             _tracker!.UpdateTrackingOf(entity);
         }
     }
