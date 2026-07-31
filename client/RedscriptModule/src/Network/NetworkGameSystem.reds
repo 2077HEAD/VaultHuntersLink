@@ -241,7 +241,67 @@ public native class NetworkGameSystem extends IGameSystem {
         FTLog(s"[ChoomLink] remote equip \(TDBID.ToStringDEBUG(item)) into \(TDBID.ToStringDEBUG(slot))");
     }
 
+    // Aim target from the relayed yaw/pitch: eye-height point `dist` meters along the aim
+    // direction. Yaw convention: 0 = +Y, CCW positive -> forward = (-sin, cos). VERIFY the
+    // sign in-game (Task 8) — if the torso turns mirrored, flip the X sign here.
+    private func AimTargetFor(puppet: ref<ScriptedPuppet>, yaw: Float, pitch: Float, dist: Float) -> Vector4 {
+        let yawRad = Deg2Rad(yaw);
+        let pitchRad = Deg2Rad(pitch);
+        let dir = new Vector4(-SinF(yawRad) * CosF(pitchRad), CosF(yawRad) * CosF(pitchRad), SinF(pitchRad), 0.0);
+        return puppet.GetWorldPosition() + dir * dist + new Vector4(0.0, 0.0, 1.55, 0.0);
+    }
+
+    // Weapon sync aim: drives the remote puppet's upper body toward the relayed aim point via
+    // the engine's LookAt system — the recipe every NPC reaction uses (vanilla
+    // reactionComponent.script:3558-3586, Chest weight = torso). Discrete re-adds on aim
+    // change are fine: LookAt styles smooth the transition anim-side.
+    public func ApplyAimOnPuppet(entity: ref<Entity>, yaw: Float, pitch: Float) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        this.ClearAimOnPuppet(entity);
+        let evt = new LookAtAddEvent();
+        evt.SetStaticTarget(this.AimTargetFor(puppet, yaw, pitch, 20.0));
+        evt.SetStyle(animLookAtStyle.Normal);
+        evt.request.limits.softLimitDegrees = 360.0;
+        evt.request.limits.hardLimitDegrees = 270.0;
+        evt.request.limits.backLimitDegrees = 210.0;
+        evt.request.limits.hardLimitDistance = GetLookAtLimitDistanceValue(animLookAtLimitDistanceType.None);
+        evt.bodyPart = n"Eyes";
+        let parts: array<LookAtPartRequest>;
+        let part: LookAtPartRequest;
+        part.partName = n"Head";
+        part.weight = 0.30;
+        part.suppress = 1.00;
+        part.mode = 0;
+        ArrayPush(parts, part);
+        part.partName = n"Chest";
+        part.weight = 2.00;
+        part.suppress = 0.00;
+        part.mode = 0;
+        ArrayPush(parts, part);
+        evt.SetAdditionalPartsArray(parts);
+        puppet.QueueEvent(evt);
+        puppet.choomlink_aimLookAt = evt;
+    }
+
+    public func ClearAimOnPuppet(entity: ref<Entity>) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        if IsDefined(puppet.choomlink_aimLookAt) {
+            LookAtRemoveEvent.QueueRemoveLookatEvent(puppet, puppet.choomlink_aimLookAt);
+            puppet.choomlink_aimLookAt = null;
+        }
+    }
+
 }
+
+// Per-puppet aim LookAt state (redscript has no map type; the puppet itself carries it).
+@addField(ScriptedPuppet)
+let choomlink_aimLookAt: ref<LookAtAddEvent>;
 
 @addMethod(GameInstance)
 public static native func GetNetworkGameSystem() -> ref<NetworkGameSystem>

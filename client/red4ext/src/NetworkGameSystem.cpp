@@ -684,6 +684,19 @@ void NetworkGameSystem::PollIncomingMessages()
             moveState.idleApplied = false;
 
             DriveLocomotionFeed(entity.value(), moveState);
+
+            // Weapon sync aim: re-issue the upper-body LookAt when the relayed aim moved
+            // beyond the threshold. Only armed puppets aim (unarmed head-tracking would look
+            // odd during locomotion); ClearAimOnPuppet runs on unequip.
+            if (moveState.weaponDrawn
+                && std::abs(moveState.targetYaw - moveState.lastAimYaw)
+                       + std::abs(moveState.targetPitch - moveState.lastAimPitch) > 2.0f)
+            {
+                moveState.lastAimYaw = moveState.targetYaw;
+                moveState.lastAimPitch = moveState.targetPitch;
+                Red::CallVirtual(this, "ApplyAimOnPuppet", entity.value(), moveState.targetYaw,
+                                 moveState.targetPitch);
+            }
         }
         break;
 
@@ -745,7 +758,15 @@ void NetworkGameSystem::PollIncomingMessages()
             Red::CallVirtual(this, "ApplyEquipOnPuppet", equipEntity.value(),
                              RED4ext::TweakDBID(equip_item.slot), RED4ext::TweakDBID(equip_item.itemId),
                              equip_item.isUnequipping);
-            m_movementState[equipEntityId].weaponDrawn = !equip_item.isUnequipping;
+            auto& equipMoveState = m_movementState[equipEntityId];
+            equipMoveState.weaponDrawn = !equip_item.isUnequipping;
+            if (equip_item.isUnequipping)
+            {
+                Red::CallVirtual(this, "ClearAimOnPuppet", equipEntity.value());
+                // Force a fresh LookAt on the next draw.
+                equipMoveState.lastAimYaw = 999.0f;
+                equipMoveState.lastAimPitch = 999.0f;
+            }
         }
         break;
 
