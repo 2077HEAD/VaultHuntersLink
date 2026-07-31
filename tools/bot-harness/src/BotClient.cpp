@@ -159,20 +159,12 @@ void BotClient::HandleMessage(const void* data, const size_t size)
             {
                 m_state = State::Running;
 
-                // Weapon sync: draw the configured weapon right after joining. Same reliable
-                // stream as the join packet, so the server sees the puppet first.
-                if (m_weaponTdbid != 0)
+                // Weapon sync: draw the configured weapon after joining (immediately, or after
+                // m_equipDelay seconds — see SendTick). Same reliable stream as the join packet,
+                // so the server sees the puppet first.
+                if (m_weaponTdbid != 0 && m_equipDelay <= 0.0f)
                 {
-                    PlayerEquipItem equip = {};
-                    equip.slot = TdbId("AttachmentSlots.WeaponRight");
-                    equip.itemId = m_weaponTdbid;
-                    equip.isWeapon = true;
-                    equip.isUnequipping = false;
-                    if (Send(equip))
-                    {
-                        std::printf("[%s] drew weapon %llu\n", m_name.c_str(),
-                                    static_cast<unsigned long long>(m_weaponTdbid));
-                    }
+                    SendEquip();
                 }
             }
         }
@@ -286,6 +278,10 @@ void BotClient::SendTick(const float dt)
     // Armed bots oscillate their aim pitch (+/-40 deg, ~6.3 s period) so the client-side
     // upper-body LookAt has something visible to track in screenshot bursts (Task 8).
     m_elapsed += dt;
+    if (m_weaponTdbid != 0 && !m_equipSent && m_equipDelay > 0.0f && m_elapsed >= m_equipDelay)
+    {
+        SendEquip();
+    }
     if (m_weaponTdbid != 0)
     {
         m_lastPose.pitch = 40.0f * std::sin(m_elapsed);
@@ -306,6 +302,21 @@ void BotClient::SendJump()
     action.action = eACTION_JUMP;
     action.worldTransform = m_lastPose.position;
     Send(action);
+}
+
+void BotClient::SendEquip()
+{
+    PlayerEquipItem equip = {};
+    equip.slot = TdbId("AttachmentSlots.WeaponRight");
+    equip.itemId = m_weaponTdbid;
+    equip.isWeapon = true;
+    equip.isUnequipping = false;
+    if (Send(equip))
+    {
+        m_equipSent = true;
+        std::printf("[%s] drew weapon %llu (%.0fs after join)\n", m_name.c_str(),
+                    static_cast<unsigned long long>(m_weaponTdbid), m_elapsed);
+    }
 }
 
 void BotClient::SendShoot()

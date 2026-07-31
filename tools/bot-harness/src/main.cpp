@@ -37,6 +37,7 @@ struct Options
     float boundaryDistance = 440.0f; // oscillation center distance for the boundary pattern
     uint64_t weaponTdbid = 0; // weapon each bot draws after joining; 0 = unarmed
     float shootEvery = 0.0f;  // seconds between PlayerShoot per bot; 0 = never (needs --weapon)
+    float equipDelay = 0.0f;  // seconds after join before drawing the weapon; 0 = immediately
 };
 
 bool ParseArgs(const int argc, char** argv, Options& options)
@@ -154,6 +155,12 @@ bool ParseArgs(const int argc, char** argv, Options& options)
             if (!value) return false;
             options.shootEvery = static_cast<float>(std::atof(value));
         }
+        else if (arg == "--equip-delay")
+        {
+            const auto value = next();
+            if (!value) return false;
+            options.equipDelay = static_cast<float>(std::atof(value));
+        }
         else
         {
             std::fprintf(stderr,
@@ -161,7 +168,7 @@ bool ParseArgs(const int argc, char** argv, Options& options)
                          "                   [--pattern circle|random|boundary|static|strafe|backpedal] [--center x,y,z] [--hz 10]\n"
                          "                   [--jump-every <seconds>] [--distance <m, boundary pattern>]\n"
                          "                   [--weapon <tdbid-u64 | record name, e.g. Items.Preset_Ajax_Default>]\n"
-                         "                   [--shoot-every <seconds, needs --weapon>]\n");
+                         "                   [--shoot-every <seconds, needs --weapon>] [--equip-delay <seconds>]\n");
             return false;
         }
     }
@@ -229,7 +236,7 @@ int main(const int argc, char** argv)
     {
         auto bot = std::make_unique<BotClient>(i, iface,
                                                Behavior(options.pattern, options.center, i, options.boundaryDistance));
-        bot->SetWeapon(options.weaponTdbid);
+        bot->SetWeapon(options.weaponTdbid, options.equipDelay);
         bot->Connect(address);
         bots.push_back(std::move(bot));
     }

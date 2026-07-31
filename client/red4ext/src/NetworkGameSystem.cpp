@@ -607,17 +607,23 @@ void NetworkGameSystem::PollIncomingMessages()
                 break;
             }
 
-            // Flush an equip that arrived before this entity finished spawning (spawn race —
-            // see the eEquipItemEntity case). Runs before the aim check below so weaponDrawn
-            // is already correct for this very packet.
-            if (const auto pendingEquip = m_pendingEquips.find(teleport.networkedEntityId);
-                pendingEquip != m_pendingEquips.end())
-            {
-                ApplyEquipPacket(entity.value(), entityId, pendingEquip->second);
-                m_pendingEquips.erase(pendingEquip);
-            }
-
             const auto positionSource = Cyberverse::Utils::Entity_GetWorldPosition(entity.value());
+
+            // Flush an equip that arrived before this entity finished spawning (spawn race —
+            // see the eEquipItemEntity case). Gated on a real world position: at (0, 0, 0) the
+            // entity is still detached mid-spawn, and a TransactionSystem equip at that point
+            // T-poses the puppet permanently (measured 2026-07-31, session 2: equip 175 ms
+            // after spawn start -> T-pose; equip on a placed puppet -> clean draw). Position
+            // != 0 is the same attached-signal the fresh-spawn branch below relies on.
+            if (positionSource.X != 0.0f || positionSource.Y != 0.0f || positionSource.Z != 0.0f)
+            {
+                if (const auto pendingEquip = m_pendingEquips.find(teleport.networkedEntityId);
+                    pendingEquip != m_pendingEquips.end())
+                {
+                    ApplyEquipPacket(entity.value(), entityId, pendingEquip->second);
+                    m_pendingEquips.erase(pendingEquip);
+                }
+            }
 
             if (positionSource.X == 0.0 && positionSource.Y == 0.0 && positionSource.Z == 0.0)
             {
