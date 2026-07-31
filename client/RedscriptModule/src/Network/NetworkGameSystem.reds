@@ -65,12 +65,6 @@ public native class NetworkGameSystem extends IGameSystem {
         puppet.GetAIControllerComponent().DisableCollider(); // TODO: Temp - In the future this should be controlled by the server, but currently Judy's just annoying :D 
         puppet.GetAIControllerComponent().ForceTickNextFrame();
 
-        // let attackCommand = new AIMeleeAttackCommand();
-        // puppet.GetAIControllerComponent().SendCommand(attackCommand);
-
-        // let weapon = ScriptedPuppet.GetActiveWeapon(puppet);
-        // weapon.ShootStraight(true);
-
         return teleportCommand;
     }
 
@@ -215,6 +209,36 @@ public native class NetworkGameSystem extends IGameSystem {
         // test decides whether phase 1 jump display needs a different approach.
         AnimationControllerComponent.PushEvent(puppet, n"Jump");
         FTLog(s"[ChoomLink] remote jump for puppet \(EntityID.GetHash(puppet.GetEntityID()))");
+    }
+
+    // Weapon sync (EquipItemEntity packet): equips/unequips the relayed item on the remote
+    // puppet through the game's own NPC path — TransactionSystem GiveItem + AddItemToSlot,
+    // exactly EquipSavedLoadoutTask (vanilla scriptedPuppet.script:358-372). The engine owns
+    // mesh attachment, appearance and draw/holster from there. Slot comes from the packet:
+    // cyberware arms are just a different slot/item id through the same code.
+    public func ApplyEquipOnPuppet(entity: ref<Entity>, slot: TweakDBID, item: TweakDBID, isUnequipping: Bool) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        let ts = GameInstance.GetTransactionSystem(puppet.GetGame());
+        if isUnequipping {
+            ts.RemoveItemFromSlot(puppet, slot, true);
+            FTLog(s"[ChoomLink] remote unequip slot \(TDBID.ToStringDEBUG(slot))");
+            return;
+        }
+        if !IsDefined(TweakDBInterface.GetItemRecord(item)) {
+            // Unknown record (e.g. a modded item this observer lacks): puppet stays unarmed,
+            // never crash (weapon sync spec §5).
+            FTLog(s"[ChoomLink] unknown item record for remote equip, skipping");
+            return;
+        }
+        let itemId = ItemID.FromTDBID(item);
+        if !ts.HasItem(puppet, itemId) {
+            ts.GiveItem(puppet, itemId, 1);
+        }
+        ts.AddItemToSlot(puppet, slot, itemId);
+        FTLog(s"[ChoomLink] remote equip \(TDBID.ToStringDEBUG(item)) into \(TDBID.ToStringDEBUG(slot))");
     }
 
 }

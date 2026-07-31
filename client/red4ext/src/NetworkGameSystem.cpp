@@ -416,6 +416,9 @@ void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& enti
     if (!state.animSetupInputsSet)
     {
         state.animSetupInputsSet = true;
+        // Weapon sync (2026-07-31): deliberately forced, NOT equip-derived — unlocking the
+        // combat animset is what keeps walk_090/270 resolvable for ALL puppets, armed or not
+        // (D3). Weapon-truthful inputs would bind-pose unarmed lateral movement.
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("MeleeWeapon"), true);
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("combatLocomotion"), true);
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("WeaponRight"), true);
@@ -709,6 +712,40 @@ void NetworkGameSystem::PollIncomingMessages()
 
             // Unknown action values are ignored inside the redscript handler (forward compatibility).
             Red::CallVirtual(this, "PuppetAction", entity.value(), static_cast<uint32_t>(entity_action.action));
+        }
+        break;
+
+        case eEquipItemEntity:
+        {
+            EquipItemEntity equip_item = {};
+            if (zpp::bits::failure(in(equip_item)))
+            {
+                SDK->logger->Error(PLUGIN, "Faulty packet: EquipItemEntity");
+                pIncomingMsg->Release();
+                continue;
+            }
+
+            if (!m_networkedEntitiesLookup.contains(equip_item.networkedEntityId))
+            {
+                // Equip for an entity we don't track (spawn race): drop, the track-start
+                // snapshot re-delivers the state once the entity exists (spec §5).
+                break;
+            }
+
+            const auto equipEntityId = m_networkedEntitiesLookup[equip_item.networkedEntityId];
+            const auto equipEntity = Cyberverse::Utils::GetDynamicEntity(equipEntityId);
+            if (!equipEntity.has_value())
+            {
+                break;
+            }
+
+            SDK->logger->InfoF(PLUGIN, "diag: entity %llu equip slot %llu item %llu unequip=%d",
+                               equip_item.networkedEntityId, equip_item.slot, equip_item.itemId,
+                               equip_item.isUnequipping ? 1 : 0);
+            Red::CallVirtual(this, "ApplyEquipOnPuppet", equipEntity.value(),
+                             RED4ext::TweakDBID(equip_item.slot), RED4ext::TweakDBID(equip_item.itemId),
+                             equip_item.isUnequipping);
+            m_movementState[equipEntityId].weaponDrawn = !equip_item.isUnequipping;
         }
         break;
 

@@ -46,6 +46,7 @@ private:
         float timeSinceUpdate = 0.0f;    // accumulated frame dt since the last packet
         bool hasTarget = false;
         bool idleApplied = false;        // idle anim feed sent since arrival (send once)
+        bool weaponDrawn = false;        // remote equip state (EquipItemEntity), gates the aim LookAt
         // D3 lateral-clip unlock (2026-07-29): whether the AnimationControllerComponent
         // SetInputBool calls that make the combat locomotion animset loadable have been sent
         // for this puppet yet (send once — see DriveLocomotionFeed).
