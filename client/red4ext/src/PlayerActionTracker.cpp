@@ -61,6 +61,7 @@ void PlayerActionTracker::OnShoot(RED4ext::Handle<RED4ext::gameprojectileShootEv
     player_shoot.charge = event->params.charge;
     player_shoot.startPoint = Vector3 { event->startPoint.X, event->startPoint.Y, event->startPoint.Z };
     player_shoot.itemIdWeapon = weaponTdbid;
+    SDK->logger->InfoF(PLUGIN, "diag: local shot captured, weapon %llu", weaponTdbid);
     Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, player_shoot);
 }
 
