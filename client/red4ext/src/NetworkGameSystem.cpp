@@ -795,7 +795,9 @@ void NetworkGameSystem::PollIncomingMessages()
 
             SDK->logger->TraceF(PLUGIN, "diag: entity %llu shot weapon %llu", entity_shoot.networkedEntityId,
                                 entity_shoot.itemIdWeapon);
-            // Task 6 fills this with the AIWeapon.Fire apply call.
+            const auto& shooterMoveState = m_movementState[shooterEntityId];
+            Red::CallVirtual(this, "ApplyShootOnPuppet", shooter.value(), shooterMoveState.targetYaw,
+                             shooterMoveState.targetPitch, entity_shoot.charge);
         }
         break;
 

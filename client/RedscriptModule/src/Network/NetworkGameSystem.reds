@@ -286,6 +286,28 @@ public native class NetworkGameSystem extends IGameSystem {
         puppet.choomlink_aimLookAt = evt;
     }
 
+    // Weapon sync shots (EntityShoot packet): fires the remote puppet's drawn weapon through
+    // AIWeapon.Fire — the exact call every NPC shot goes through (vanilla
+    // tweakAISubActions.script:2459), no AI behavior context needed. Projectile/hitscan,
+    // spread and muzzle effects are engine-owned from there.
+    // timeStamp mirrors the AI caller's duration param; 0.0 = fire now. If nothing shows
+    // in-game, second attempt: EngineTime.ToFloat(GameInstance.GetSimTime(...)).
+    public func ApplyShootOnPuppet(entity: ref<Entity>, yaw: Float, pitch: Float, charge: Float) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        let ts = GameInstance.GetTransactionSystem(puppet.GetGame());
+        let weapon = ts.GetItemInSlot(puppet, t"AttachmentSlots.WeaponRight") as WeaponObject;
+        if !IsDefined(weapon) {
+            // Shot for an unarmed puppet (packet race with equip): drop, never crash (spec §5).
+            return;
+        }
+        let target = this.AimTargetFor(puppet, yaw, pitch, 50.0);
+        AIWeapon.Fire(puppet, weapon, 0.0, 1.0, gamedataTriggerMode.SemiAuto, target);
+        FTLog(s"[ChoomLink] remote shot for puppet \(EntityID.GetHash(puppet.GetEntityID()))");
+    }
+
     public func ClearAimOnPuppet(entity: ref<Entity>) {
         let puppet = entity as ScriptedPuppet;
         if !IsDefined(puppet) {
