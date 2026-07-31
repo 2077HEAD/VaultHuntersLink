@@ -7,6 +7,9 @@ public struct PlayerEquipItem
 {
     public ulong slot;
     public ulong itemId;
-    public bool isWeapon;
-    public bool isUnequipping; // TODO: For some reason this flag is always false. Is this a packing issue because the bools got bitpacked?
+    // Wire bools are 1 byte (zpp::bits/C++), .NET default-marshals bool as 4 bytes — without
+    // I1 the second flag reads padding and is always false (upstream's TODO; root-caused
+    // 2026-07-31: client sent isUnequipping=true, server logged unequip=False).
+    [MarshalAs(UnmanagedType.I1)] public bool isWeapon;
+    [MarshalAs(UnmanagedType.I1)] public bool isUnequipping;
 }

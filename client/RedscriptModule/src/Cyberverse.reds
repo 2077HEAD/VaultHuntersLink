@@ -80,8 +80,45 @@ protected cb func OnUnmountingEvent(evt: ref<UnmountingEvent>) -> Bool {
     return result;
 }
 
-// replaces the OnWeapoNEquipEvent as we need the counterpart for unequiping anyway?
-// protected cb func OnWeaponEquipEvent(evt: ref<WeaponEquipEvent>) -> Bool {
+// Draw detection (choomlink-e9eg): fires on EVERY draw, including quick-drawing the same
+// weapon again — the slot listener below misses those, because holstering never removes
+// the item from its attachment slot (69 equip / 0 unequip slot events over a whole
+// two-client session, 2026-07-31). Queued by the equipment PSM's equip cycle
+// (equipment.script:195-198).
+@wrapMethod(PlayerPuppet)
+protected cb func OnWeaponEquipEvent(evt: ref<WeaponEquipEvent>) -> Bool {
+    let result = wrappedMethod(evt);
+    if IsDefined(evt.item) {
+        let itemId = evt.item.GetItemID();
+        let isWeapon = RPGManager.IsItemWeapon(itemId)
+            || RPGManager.IsItemTypeCyberwareWeapon(RPGManager.GetItemType(itemId));
+        GameInstance.GetNetworkGameSystem().playerActionTracker
+            .OnItemEquipped(EquipmentSystem.GetPlacementSlot(itemId), itemId, isWeapon);
+    }
+    return result;
+}
+
+// Holster detection (choomlink-e9eg): the unequip PSM cycle keeps the item in its slot, so
+// slot listeners never see holstering. An @addMethod event callback for UnequipEnd on
+// PlayerPuppet never fired (verified live 2026-07-31) — wrap the PSM state class that
+// queues the event instead (equipment.script:944ff), which is guaranteed to run.
+@wrapMethod(UnequipCycleEvents)
+protected func OnExit(stateContext: ref<StateContext>, scriptInterface: ref<StateGameScriptInterface>) -> Void {
+    wrappedMethod(stateContext, scriptInterface);
+    let item = this.GetItemIDFromParam(this.stateMachineInstanceData, stateContext);
+    if !ItemID.IsValid(item) {
+        return;
+    }
+    // Right hand only — the cycle also runs for left-hand gadgets/consumables.
+    if NotEquals(EquipmentSystem.GetPlacementSlot(item), t"AttachmentSlots.WeaponRight") {
+        return;
+    }
+    let isWeapon = RPGManager.IsItemWeapon(item)
+        || RPGManager.IsItemTypeCyberwareWeapon(RPGManager.GetItemType(item));
+    GameInstance.GetNetworkGameSystem().playerActionTracker
+        .OnItemUnequipped(t"AttachmentSlots.WeaponRight", item, isWeapon);
+}
+
 @wrapMethod(PlayerPuppet)
 public final func OnItemEquipped(slot: TweakDBID, item: ItemID) -> Void {
     // Cyberware weapons (mantis blades & co.) are category Cyberware, not Weapon — but they

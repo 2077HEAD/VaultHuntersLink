@@ -166,23 +166,17 @@ public class PlayerPacketHandler
             return;
         }
 
+        // No dedupe (choomlink-e9eg): quick-drawing the same weapon MUST relay again — the
+        // remote apply is idempotent, and swallowed re-draws left puppets bare-handed
+        // (live two-client finding 2026-07-31). State is tracked for track-start snapshots only.
         var puppet = player.PuppetEntity;
         if (content.isUnequipping)
         {
-            // Idempotent: unequip of an empty/other slot state is a no-op state-wise.
-            if (puppet.DrawnWeaponSlot != content.slot)
-            {
-                return;
-            }
             puppet.DrawnWeaponSlot = 0;
             puppet.DrawnWeaponItemId = 0;
         }
         else
         {
-            if (puppet.DrawnWeaponSlot == content.slot && puppet.DrawnWeaponItemId == content.itemId)
-            {
-                return;
-            }
             puppet.DrawnWeaponSlot = content.slot;
             puppet.DrawnWeaponItemId = content.itemId;
         }
