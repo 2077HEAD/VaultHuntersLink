@@ -206,7 +206,28 @@ public class PlayerPacketHandler
     private void HandleShoot(GameServer server, EMessageTypeServerbound messageType, byte channelId,
         uint connectionId, PlayerShoot content)
     {
-        Logger.Warn($"Shots fired! {content.itemIdWeapon} at {content.startPoint}");
+        // Relay the shot to every player tracking the shooter's puppet (pattern: HandleActionTracked).
+        var senderEntity = server.EntityService.SpawnedEntities.Values
+            .FirstOrDefault(entity => entity.NetworkIdOwner == connectionId && !entity.IsVehicle);
+        if (senderEntity == null)
+        {
+            Logger.Warn($"PlayerShoot from connection {connectionId} without a spawned entity, dropping");
+            return;
+        }
+
+        Logger.Trace($"Shot by {connectionId}: weapon {content.itemIdWeapon} at {content.startPoint}");
+
+        var shot = new EntityShoot
+        {
+            NetworkedEntityId = senderEntity.NetworkedEntityId,
+            ItemIdWeapon = content.itemIdWeapon,
+            StartPoint = content.startPoint,
+            Charge = content.charge
+        };
+        foreach (var trackingConnectionId in _tracker!.GetPlayersTracking(senderEntity.NetworkedEntityId))
+        {
+            server.EnqueueMessage(EMessageTypeClientbound.EntityShoot, trackingConnectionId, channelId, shot);
+        }
     }
 
     private void HandleActionTracked(GameServer server, EMessageTypeServerbound messageType, byte channelId,

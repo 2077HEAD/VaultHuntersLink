@@ -36,6 +36,7 @@ public:
     void PollIncomingMessages();
     void SendTick(float dt); // behavior update + PlayerPositionUpdate while Running
     void SendJump();         // PlayerActionTracked(jump) at the current position
+    void SendShoot();        // PlayerShoot with the configured weapon at the current position
     void Close(const char* reason);
 
     State GetState() const { return m_state; }
@@ -68,6 +69,12 @@ public:
     {
         const auto count = m_equipsReceived;
         m_equipsReceived = 0;
+        return count;
+    }
+    uint64_t ConsumeShotCount()
+    {
+        const auto count = m_shotsReceived;
+        m_shotsReceived = 0;
         return count;
     }
 
@@ -122,6 +129,7 @@ private:
     uint64_t m_spawnsReceived = 0;
     uint64_t m_despawnsReceived = 0;
     uint64_t m_equipsReceived = 0;
+    uint64_t m_shotsReceived = 0;
     uint64_t m_weaponTdbid = 0;
 
     static std::unordered_map<HSteamNetConnection, BotClient*> s_byConnection;

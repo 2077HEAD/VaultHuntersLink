@@ -238,6 +238,19 @@ void BotClient::HandleMessage(const void* data, const size_t size)
     }
     break;
 
+    case eEntityShoot:
+    {
+        EntityShoot shot = {};
+        if (zpp::bits::failure(in(shot)))
+        {
+            std::fprintf(stderr, "[%s] faulty packet: EntityShoot\n", m_name.c_str());
+            return;
+        }
+        // counted, not logged — a shooting crowd would flood the console
+        m_shotsReceived++;
+    }
+    break;
+
     case eEquipItemEntity:
     {
         EquipItemEntity equip = {};
@@ -282,6 +295,20 @@ void BotClient::SendJump()
     action.action = eACTION_JUMP;
     action.worldTransform = m_lastPose.position;
     Send(action);
+}
+
+void BotClient::SendShoot()
+{
+    if (m_state != State::Running || m_weaponTdbid == 0)
+    {
+        return;
+    }
+
+    PlayerShoot shoot = {};
+    shoot.itemIdWeapon = m_weaponTdbid;
+    shoot.startPoint = m_lastPose.position;
+    shoot.charge = 1.0f;
+    Send(shoot);
 }
 
 void BotClient::Close(const char* reason)

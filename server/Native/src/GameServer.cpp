@@ -339,6 +339,7 @@ void GameServer::ProcessSendQueue()
             SERIALIZE_SEND_QUEUE(eDestroyEntity, DestroyEntity)
             SERIALIZE_SEND_QUEUE(eEquipItemEntity, EquipItemEntity)
             SERIALIZE_SEND_QUEUE(eEntityAction, EntityAction)
+            SERIALIZE_SEND_QUEUE(eEntityShoot, EntityShoot)
             default:
                 printf("Unknown messageType: %d\n", val.messageType);
         }

@@ -70,3 +70,17 @@ struct EquipItemEntity {
         frame.channel_id = 0; // TODO
     }
 };
+
+// Relays a serverbound PlayerShoot to the clients tracking the shooter's puppet.
+struct EntityShoot {
+    uint64_t networkedEntityId;
+    uint64_t itemIdWeapon;
+    Vector3 startPoint;
+    float charge;
+
+    inline static void FillMessageFrame(MessageFrame& frame)
+    {
+        frame.message_type = eEntityShoot;
+        frame.channel_id = 1;
+    }
+};

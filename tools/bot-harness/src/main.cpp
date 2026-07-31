@@ -36,6 +36,7 @@ struct Options
     float jumpEvery = 0.0f; // seconds between jump actions per bot; 0 = never
     float boundaryDistance = 440.0f; // oscillation center distance for the boundary pattern
     uint64_t weaponTdbid = 0; // weapon each bot draws after joining; 0 = unarmed
+    float shootEvery = 0.0f;  // seconds between PlayerShoot per bot; 0 = never (needs --weapon)
 };
 
 bool ParseArgs(const int argc, char** argv, Options& options)
@@ -147,13 +148,20 @@ bool ParseArgs(const int argc, char** argv, Options& options)
                             static_cast<unsigned long long>(options.weaponTdbid));
             }
         }
+        else if (arg == "--shoot-every")
+        {
+            const auto value = next();
+            if (!value) return false;
+            options.shootEvery = static_cast<float>(std::atof(value));
+        }
         else
         {
             std::fprintf(stderr,
                          "usage: bot-harness [--server 127.0.0.1] [--port 1337] [--count 8]\n"
                          "                   [--pattern circle|random|boundary|static|strafe|backpedal] [--center x,y,z] [--hz 10]\n"
                          "                   [--jump-every <seconds>] [--distance <m, boundary pattern>]\n"
-                         "                   [--weapon <tdbid-u64 | record name, e.g. Items.Preset_Ajax_Default>]\n");
+                         "                   [--weapon <tdbid-u64 | record name, e.g. Items.Preset_Ajax_Default>]\n"
+                         "                   [--shoot-every <seconds, needs --weapon>]\n");
             return false;
         }
     }
@@ -230,6 +238,7 @@ int main(const int argc, char** argv)
     float sendAccumulator = 0.0f;
     float statsAccumulator = 0.0f;
     float jumpAccumulator = 0.0f;
+    float shootAccumulator = 0.0f;
     auto lastTime = std::chrono::steady_clock::now();
 
     while (!g_stop)
@@ -267,13 +276,26 @@ int main(const int argc, char** argv)
             }
         }
 
+        if (options.shootEvery > 0.0f)
+        {
+            shootAccumulator += dt;
+            if (shootAccumulator >= options.shootEvery)
+            {
+                shootAccumulator = 0.0f;
+                for (const auto& bot : bots)
+                {
+                    bot->SendShoot();
+                }
+            }
+        }
+
         statsAccumulator += dt;
         if (statsAccumulator >= 1.0f)
         {
             statsAccumulator = 0.0f;
 
             int running = 0, dead = 0;
-            uint64_t teleports = 0, actions = 0, spawns = 0, despawns = 0, equips = 0;
+            uint64_t teleports = 0, actions = 0, spawns = 0, despawns = 0, equips = 0, shots = 0;
             for (const auto& bot : bots)
             {
                 if (bot->GetState() == BotClient::State::Running) running++;
@@ -283,11 +305,13 @@ int main(const int argc, char** argv)
                 spawns += bot->ConsumeSpawnCount();
                 despawns += bot->ConsumeDespawnCount();
                 equips += bot->ConsumeEquipCount();
+                shots += bot->ConsumeShotCount();
             }
-            std::printf("stats: %d/%zu running, %d dead, %llu teleports, %llu actions, %llu spawns, %llu despawns, %llu equips received/s\n",
+            std::printf("stats: %d/%zu running, %d dead, %llu teleports, %llu actions, %llu spawns, %llu despawns, %llu equips, %llu shots received/s\n",
                         running, bots.size(), dead, static_cast<unsigned long long>(teleports),
                         static_cast<unsigned long long>(actions), static_cast<unsigned long long>(spawns),
-                        static_cast<unsigned long long>(despawns), static_cast<unsigned long long>(equips));
+                        static_cast<unsigned long long>(despawns), static_cast<unsigned long long>(equips),
+                        static_cast<unsigned long long>(shots));
 
             if (dead == static_cast<int>(bots.size()))
             {

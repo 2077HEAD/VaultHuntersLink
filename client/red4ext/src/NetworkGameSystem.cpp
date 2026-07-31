@@ -712,6 +712,35 @@ void NetworkGameSystem::PollIncomingMessages()
         }
         break;
 
+        case eEntityShoot:
+        {
+            EntityShoot entity_shoot = {};
+            if (zpp::bits::failure(in(entity_shoot)))
+            {
+                SDK->logger->Error(PLUGIN, "Faulty packet: EntityShoot");
+                pIncomingMsg->Release();
+                continue;
+            }
+
+            if (!m_networkedEntitiesLookup.contains(entity_shoot.networkedEntityId))
+            {
+                // Packet race with spawn/despawn: drop, never crash (spec §5).
+                break;
+            }
+
+            const auto shooterEntityId = m_networkedEntitiesLookup[entity_shoot.networkedEntityId];
+            const auto shooter = Cyberverse::Utils::GetDynamicEntity(shooterEntityId);
+            if (!shooter.has_value())
+            {
+                break;
+            }
+
+            SDK->logger->TraceF(PLUGIN, "diag: entity %llu shot weapon %llu", entity_shoot.networkedEntityId,
+                                entity_shoot.itemIdWeapon);
+            // Task 6 fills this with the AIWeapon.Fire apply call.
+        }
+        break;
+
         case eDestroyEntity:
         {
             DestroyEntity destroy_entity = {};
