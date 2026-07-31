@@ -40,11 +40,17 @@ private:
     {
         RED4ext::Vector4 targetPosition {};
         float targetYaw = 0.0f;
+        float targetPitch = 0.0f;        // aim pitch (degrees) from TeleportEntity, drives upper-body LookAt
         RED4ext::Vector4 velocity {};    // world units/s toward target
         float speed = 0.0f;              // m/s magnitude, feeds the anim graph
         float timeSinceUpdate = 0.0f;    // accumulated frame dt since the last packet
         bool hasTarget = false;
         bool idleApplied = false;        // idle anim feed sent since arrival (send once)
+        bool weaponDrawn = false;        // remote equip state (EquipItemEntity), gates the aim LookAt
+        float lastAimYaw = 999.0f;       // last yaw/pitch applied as LookAt (999 = never applied,
+        float lastAimPitch = 999.0f;     // forces the first apply once a weapon is drawn)
+        float lastIdleYaw = 999.0f;      // last yaw applied while STANDING (idle path skips
+                                         // teleports, so camera turns froze the body facing)
         // D3 lateral-clip unlock (2026-07-29): whether the AnimationControllerComponent
         // SetInputBool calls that make the combat locomotion animset loadable have been sent
         // for this puppet yet (send once — see DriveLocomotionFeed).
@@ -61,6 +67,16 @@ private:
         float walkAnimPoll = 0.0f;
     };
     std::map<RED4ext::ent::EntityID, MovementState> m_movementState;
+
+    // Equip packets that arrived before their entity finished its async spawn (measured
+    // 2026-07-31: the track-start snapshot beats the spawn by design). Keyed by
+    // networkedEntityId; the teleport path flushes them once the entity resolves.
+    std::map<uint64_t, EquipItemEntity> m_pendingEquips;
+
+    // Applies one EquipItemEntity to a resolved puppet: redscript TransactionSystem apply +
+    // the movement-state bookkeeping (weaponDrawn, aim LookAt teardown on unequip).
+    void ApplyEquipPacket(const Red::Handle<Red::Entity>& entity, RED4ext::ent::EntityID entityId,
+                          const EquipItemEntity& equip);
     std::map<RED4ext::ent::EntityID, RED4ext::Handle<RED4ext::AICommand>> m_LastTeleportCommand;
     float m_TimeSinceLastPlayerPositionSync;
 

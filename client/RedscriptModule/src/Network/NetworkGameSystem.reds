@@ -65,12 +65,6 @@ public native class NetworkGameSystem extends IGameSystem {
         puppet.GetAIControllerComponent().DisableCollider(); // TODO: Temp - In the future this should be controlled by the server, but currently Judy's just annoying :D 
         puppet.GetAIControllerComponent().ForceTickNextFrame();
 
-        // let attackCommand = new AIMeleeAttackCommand();
-        // puppet.GetAIControllerComponent().SendCommand(attackCommand);
-
-        // let weapon = ScriptedPuppet.GetActiveWeapon(puppet);
-        // weapon.ShootStraight(true);
-
         return teleportCommand;
     }
 
@@ -217,7 +211,133 @@ public native class NetworkGameSystem extends IGameSystem {
         FTLog(s"[ChoomLink] remote jump for puppet \(EntityID.GetHash(puppet.GetEntityID()))");
     }
 
+    // Weapon sync (EquipItemEntity packet): equips/unequips the relayed item on the remote
+    // puppet through the game's own NPC path — TransactionSystem GiveItem + AddItemToSlot,
+    // exactly EquipSavedLoadoutTask (vanilla scriptedPuppet.script:358-372). The engine owns
+    // mesh attachment, appearance and draw/holster from there. Slot comes from the packet:
+    // cyberware arms are just a different slot/item id through the same code.
+    public func ApplyEquipOnPuppet(entity: ref<Entity>, slot: TweakDBID, item: TweakDBID, isUnequipping: Bool) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        let ts = GameInstance.GetTransactionSystem(puppet.GetGame());
+        if isUnequipping {
+            ts.RemoveItemFromSlot(puppet, slot, true);
+            FTLog(s"[ChoomLink] remote unequip slot \(TDBID.ToStringDEBUG(slot))");
+            return;
+        }
+        if !IsDefined(TweakDBInterface.GetItemRecord(item)) {
+            // Unknown record (e.g. a modded item this observer lacks): puppet stays unarmed,
+            // never crash (weapon sync spec §5).
+            FTLog(s"[ChoomLink] unknown item record for remote equip, skipping");
+            return;
+        }
+        let itemId = ItemID.FromTDBID(item);
+        if !ts.HasItem(puppet, itemId) {
+            ts.GiveItem(puppet, itemId, 1);
+        }
+        ts.AddItemToSlot(puppet, slot, itemId);
+        FTLog(s"[ChoomLink] remote equip \(TDBID.ToStringDEBUG(item)) into \(TDBID.ToStringDEBUG(slot))");
+    }
+
+    // Aim target from the relayed yaw/pitch: eye-height point `dist` meters along the aim
+    // direction. Yaw convention: 0 = +Y, CCW positive -> forward = (-sin, cos). VERIFY the
+    // sign in-game (Task 8) — if the torso turns mirrored, flip the X sign here.
+    private func AimTargetFor(puppet: ref<ScriptedPuppet>, yaw: Float, pitch: Float, dist: Float) -> Vector4 {
+        let yawRad = Deg2Rad(yaw);
+        let pitchRad = Deg2Rad(pitch);
+        let dir = new Vector4(-SinF(yawRad) * CosF(pitchRad), CosF(yawRad) * CosF(pitchRad), SinF(pitchRad), 0.0);
+        return puppet.GetWorldPosition() + dir * dist + new Vector4(0.0, 0.0, 1.55, 0.0);
+    }
+
+    // Weapon sync aim: drives the remote puppet's upper body toward the relayed aim point via
+    // the engine's LookAt system — the recipe every NPC reaction uses (vanilla
+    // reactionComponent.script:3558-3586, Chest weight = torso). Discrete re-adds on aim
+    // change are fine: LookAt styles smooth the transition anim-side.
+    public func ApplyAimOnPuppet(entity: ref<Entity>, yaw: Float, pitch: Float) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        this.ClearAimOnPuppet(entity);
+        let evt = new LookAtAddEvent();
+        evt.SetStaticTarget(this.AimTargetFor(puppet, yaw, pitch, 20.0));
+        evt.SetStyle(animLookAtStyle.Normal);
+        evt.request.limits.softLimitDegrees = 360.0;
+        evt.request.limits.hardLimitDegrees = 270.0;
+        evt.request.limits.backLimitDegrees = 210.0;
+        evt.request.limits.hardLimitDistance = GetLookAtLimitDistanceValue(animLookAtLimitDistanceType.None);
+        evt.bodyPart = n"Eyes";
+        let parts: array<LookAtPartRequest>;
+        let part: LookAtPartRequest;
+        part.partName = n"Head";
+        part.weight = 0.30;
+        part.suppress = 1.00;
+        part.mode = 0;
+        ArrayPush(parts, part);
+        part.partName = n"Chest";
+        part.weight = 2.00;
+        part.suppress = 0.00;
+        part.mode = 0;
+        ArrayPush(parts, part);
+        evt.SetAdditionalPartsArray(parts);
+        puppet.QueueEvent(evt);
+        puppet.choomlink_aimLookAt = evt;
+    }
+
+    // Weapon sync shots (EntityShoot packet): fires the remote puppet's drawn weapon through
+    // AIWeapon.Fire — the exact call every NPC shot goes through (vanilla
+    // tweakAISubActions.script:2459), no AI behavior context needed. Projectile/hitscan,
+    // spread and muzzle effects are engine-owned from there.
+    // timeStamp mirrors the AI caller's duration param; 0.0 = fire now. If nothing shows
+    // in-game, second attempt: EngineTime.ToFloat(GameInstance.GetSimTime(...)).
+    public func ApplyShootOnPuppet(entity: ref<Entity>, yaw: Float, pitch: Float, charge: Float) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        let ts = GameInstance.GetTransactionSystem(puppet.GetGame());
+        let weapon = ts.GetItemInSlot(puppet, t"AttachmentSlots.WeaponRight") as WeaponObject;
+        if !IsDefined(weapon) {
+            // Shot for an unarmed puppet (packet race with equip): drop, never crash (spec §5).
+            return;
+        }
+        let target = this.AimTargetFor(puppet, yaw, pitch, 50.0);
+        AIWeapon.Fire(puppet, weapon, 0.0, 1.0, gamedataTriggerMode.SemiAuto, target);
+        FTLog(s"[ChoomLink] remote shot for puppet \(EntityID.GetHash(puppet.GetEntityID()))");
+    }
+
+    // Remote players must be shootable: the Judy-derived record is attitude-Friendly, which
+    // engages the game's weapon-safe trigger lock when aiming at them (scriptedPuppet.script:
+    // 3856 checks AIA_Friendly). Neutral keeps them non-hostile but a valid target.
+    public func SetupPuppetAttitude(entity: ref<Entity>) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        let agent = puppet.GetAttitudeAgent();
+        if IsDefined(agent) {
+            agent.SetAttitudeGroup(n"neutral");
+        }
+    }
+
+    public func ClearAimOnPuppet(entity: ref<Entity>) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        if IsDefined(puppet.choomlink_aimLookAt) {
+            LookAtRemoveEvent.QueueRemoveLookatEvent(puppet, puppet.choomlink_aimLookAt);
+            puppet.choomlink_aimLookAt = null;
+        }
+    }
+
 }
+
+// Per-puppet aim LookAt state (redscript has no map type; the puppet itself carries it).
+@addField(ScriptedPuppet)
+let choomlink_aimLookAt: ref<LookAtAddEvent>;
 
 @addMethod(GameInstance)
 public static native func GetNetworkGameSystem() -> ref<NetworkGameSystem>

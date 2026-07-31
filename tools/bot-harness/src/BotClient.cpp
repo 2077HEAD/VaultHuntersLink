@@ -1,11 +1,30 @@
 #include "BotClient.h"
 
+#include <cmath>
+
 #include "serverbound/AuthPacketsServerBound.h"
 #include "serverbound/WorldPacketsServerBound.h"
 #include "clientbound/AuthPacketsClientBound.h"
 #include "clientbound/WorldPacketsClientBound.h"
 
 std::unordered_map<HSteamNetConnection, BotClient*> BotClient::s_byConnection;
+
+uint64_t BotClient::TdbId(const char* name)
+{
+    // Standard reflected CRC-32 (poly 0xEDB88320), the hash the RED engine uses for TweakDBIDs.
+    uint32_t crc = 0xFFFFFFFFu;
+    size_t len = 0;
+    for (const char* p = name; *p != '\0'; ++p, ++len)
+    {
+        crc ^= static_cast<uint8_t>(*p);
+        for (int bit = 0; bit < 8; ++bit)
+        {
+            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+        }
+    }
+    crc ^= 0xFFFFFFFFu;
+    return static_cast<uint64_t>(crc) | (static_cast<uint64_t>(len & 0xFF) << 32);
+}
 
 BotClient::BotClient(const int index, ISteamNetworkingSockets* iface, Behavior behavior)
     : m_index(index), m_iface(iface), m_behavior(behavior)
@@ -130,7 +149,7 @@ void BotClient::HandleMessage(const void* data, const size_t size)
 
         if (result.auth_result == EAuthResult_Ok)
         {
-            const auto [position, yaw] = m_behavior.Spawn();
+            const auto [position, yaw, pitch] = m_behavior.Spawn();
             std::printf("[%s] login accepted, joining world at (%.1f, %.1f, %.1f)\n", m_name.c_str(), position.x,
                         position.y, position.z);
 
@@ -139,6 +158,14 @@ void BotClient::HandleMessage(const void* data, const size_t size)
             if (Send(join))
             {
                 m_state = State::Running;
+
+                // Weapon sync: draw the configured weapon after joining (immediately, or after
+                // m_equipDelay seconds — see SendTick). Same reliable stream as the join packet,
+                // so the server sees the puppet first.
+                if (m_weaponTdbid != 0 && m_equipDelay <= 0.0f)
+                {
+                    SendEquip();
+                }
             }
         }
         else
@@ -205,8 +232,36 @@ void BotClient::HandleMessage(const void* data, const size_t size)
     }
     break;
 
+    case eEntityShoot:
+    {
+        EntityShoot shot = {};
+        if (zpp::bits::failure(in(shot)))
+        {
+            std::fprintf(stderr, "[%s] faulty packet: EntityShoot\n", m_name.c_str());
+            return;
+        }
+        // counted, not logged — a shooting crowd would flood the console
+        m_shotsReceived++;
+    }
+    break;
+
+    case eEquipItemEntity:
+    {
+        EquipItemEntity equip = {};
+        if (zpp::bits::failure(in(equip)))
+        {
+            std::fprintf(stderr, "[%s] faulty packet: EquipItemEntity\n", m_name.c_str());
+            return;
+        }
+        m_equipsReceived++;
+        std::printf("[%s] peer equip: entity %llu slot %llu item %llu unequip=%d\n", m_name.c_str(),
+                    static_cast<unsigned long long>(equip.networkedEntityId),
+                    static_cast<unsigned long long>(equip.slot),
+                    static_cast<unsigned long long>(equip.itemId), equip.isUnequipping ? 1 : 0);
+    }
+    break;
+
     default:
-        // e.g. eEquipItemEntity — irrelevant for v1
         break;
     }
 }
@@ -219,7 +274,20 @@ void BotClient::SendTick(const float dt)
     }
 
     m_lastPose = m_behavior.Tick(dt);
-    const PlayerPositionUpdate update = { m_lastPose.position, m_lastPose.yaw };
+
+    // Armed bots oscillate their aim pitch (+/-40 deg, ~6.3 s period) so the client-side
+    // upper-body LookAt has something visible to track in screenshot bursts (Task 8).
+    m_elapsed += dt;
+    if (m_weaponTdbid != 0 && !m_equipSent && m_equipDelay > 0.0f && m_elapsed >= m_equipDelay)
+    {
+        SendEquip();
+    }
+    if (m_weaponTdbid != 0)
+    {
+        m_lastPose.pitch = 40.0f * std::sin(m_elapsed);
+    }
+
+    const PlayerPositionUpdate update = { m_lastPose.position, m_lastPose.yaw, m_lastPose.pitch };
     Send(update);
 }
 
@@ -234,6 +302,35 @@ void BotClient::SendJump()
     action.action = eACTION_JUMP;
     action.worldTransform = m_lastPose.position;
     Send(action);
+}
+
+void BotClient::SendEquip()
+{
+    PlayerEquipItem equip = {};
+    equip.slot = TdbId("AttachmentSlots.WeaponRight");
+    equip.itemId = m_weaponTdbid;
+    equip.isWeapon = true;
+    equip.isUnequipping = false;
+    if (Send(equip))
+    {
+        m_equipSent = true;
+        std::printf("[%s] drew weapon %llu (%.0fs after join)\n", m_name.c_str(),
+                    static_cast<unsigned long long>(m_weaponTdbid), m_elapsed);
+    }
+}
+
+void BotClient::SendShoot()
+{
+    if (m_state != State::Running || m_weaponTdbid == 0)
+    {
+        return;
+    }
+
+    PlayerShoot shoot = {};
+    shoot.itemIdWeapon = m_weaponTdbid;
+    shoot.startPoint = m_lastPose.position;
+    shoot.charge = 1.0f;
+    Send(shoot);
 }
 
 void BotClient::Close(const char* reason)

@@ -42,10 +42,26 @@ void PlayerActionTracker::TrackJump()
 
 void PlayerActionTracker::OnShoot(RED4ext::Handle<RED4ext::gameprojectileShootEvent> event)
 {
+    // Local-shot filtering happens in the redscript wrapper (Cyberverse.reds OnShoot): the
+    // projectile owner is the wielder for some weapons but the WEAPON object for others, and
+    // that check is natural in reds (TransactionSystem slot compare). Everything arriving
+    // here is already attributed to the local player.
+
+    // Weapon identity from the event (upstream left this TODO; the comment used to swallow
+    // the EnqueueMessage line as the assignment's right-hand side).
+    uint64_t weaponTdbid = 0;
+    if (const auto weapon = event->weapon.Lock())
+    {
+        RED4ext::ItemID itemId = {};
+        Red::CallVirtual(weapon, "GetItemID", itemId);
+        weaponTdbid = itemId.tdbid.value;
+    }
+
     PlayerShoot player_shoot = {};
     player_shoot.charge = event->params.charge;
     player_shoot.startPoint = Vector3 { event->startPoint.X, event->startPoint.Y, event->startPoint.Z };
-    player_shoot.itemIdWeapon = // TODO: FILL
+    player_shoot.itemIdWeapon = weaponTdbid;
+    SDK->logger->InfoF(PLUGIN, "diag: local shot captured, weapon %llu", weaponTdbid);
     Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, player_shoot);
 }
 

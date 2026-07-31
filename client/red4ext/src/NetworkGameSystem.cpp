@@ -320,6 +320,16 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
                 Red::CallVirtual(this, "StopActionAnim", state.walkAnim);
                 state.walkAnim.Reset();
             }
+
+            // A standing player still turns their camera: yaw keeps streaming in the movement
+            // packets, but without teleport commands the puppet's facing froze (live two-client
+            // finding 2026-07-31). Rotation-only update in place when the yaw moved.
+            if (state.hasTarget && std::abs(state.targetYaw - state.lastIdleYaw) > 3.0f)
+            {
+                state.lastIdleYaw = state.targetYaw;
+                const RED4ext::Vector4 standingPos = { pos.X, pos.Y, pos.Z, 1.0f };
+                Red::CallVirtual(this, "KinematicMove", entity.value(), standingPos, state.targetYaw);
+            }
             continue;
         }
 
@@ -416,9 +426,15 @@ void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& enti
     if (!state.animSetupInputsSet)
     {
         state.animSetupInputsSet = true;
+        // Weapon sync (2026-07-31): deliberately forced, NOT equip-derived — unlocking the
+        // combat animset is what keeps walk_090/270 resolvable for ALL puppets, armed or not
+        // (D3). Weapon-truthful inputs would bind-pose unarmed lateral movement.
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("MeleeWeapon"), true);
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("combatLocomotion"), true);
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("WeaponRight"), true);
+        // Weapon sync: make the puppet a valid target (attitude neutral, not Judy-friendly) —
+        // same one-shot setup point as the animset inputs.
+        Red::CallVirtual(this, "SetupPuppetAttitude", entity);
         SDK->logger->InfoF(PLUGIN, "diag: combat-locomotion animset inputs set on entity");
     }
 
@@ -606,6 +622,22 @@ void NetworkGameSystem::PollIncomingMessages()
 
             const auto positionSource = Cyberverse::Utils::Entity_GetWorldPosition(entity.value());
 
+            // Flush an equip that arrived before this entity finished spawning (spawn race —
+            // see the eEquipItemEntity case). Gated on a real world position: at (0, 0, 0) the
+            // entity is still detached mid-spawn, and a TransactionSystem equip at that point
+            // T-poses the puppet permanently (measured 2026-07-31, session 2: equip 175 ms
+            // after spawn start -> T-pose; equip on a placed puppet -> clean draw). Position
+            // != 0 is the same attached-signal the fresh-spawn branch below relies on.
+            if (positionSource.X != 0.0f || positionSource.Y != 0.0f || positionSource.Z != 0.0f)
+            {
+                if (const auto pendingEquip = m_pendingEquips.find(teleport.networkedEntityId);
+                    pendingEquip != m_pendingEquips.end())
+                {
+                    ApplyEquipPacket(entity.value(), entityId, pendingEquip->second);
+                    m_pendingEquips.erase(pendingEquip);
+                }
+            }
+
             if (positionSource.X == 0.0 && positionSource.Y == 0.0 && positionSource.Z == 0.0)
             {
                 // TODO: let's pray that this doesn't have a side effect when players DO reside at (0, 0, 0)
@@ -654,6 +686,7 @@ void NetworkGameSystem::PollIncomingMessages()
                 moveState.idealValid = true;
                 moveState.targetPosition = worldPosition;
                 moveState.targetYaw = teleport.yaw;
+                moveState.targetPitch = teleport.pitch;
                 moveState.velocity = {};
                 moveState.speed = 0.0f;
                 moveState.timeSinceUpdate = 0.0f;
@@ -674,11 +707,25 @@ void NetworkGameSystem::PollIncomingMessages()
 
             moveState.targetPosition = worldPosition;
             moveState.targetYaw = teleport.yaw;
+            moveState.targetPitch = teleport.pitch;
             moveState.timeSinceUpdate = 0.0f;
             moveState.hasTarget = true;
             moveState.idleApplied = false;
 
             DriveLocomotionFeed(entity.value(), moveState);
+
+            // Weapon sync aim: re-issue the upper-body LookAt when the relayed aim moved
+            // beyond the threshold. Only armed puppets aim (unarmed head-tracking would look
+            // odd during locomotion); ClearAimOnPuppet runs on unequip.
+            if (moveState.weaponDrawn
+                && std::abs(moveState.targetYaw - moveState.lastAimYaw)
+                       + std::abs(moveState.targetPitch - moveState.lastAimPitch) > 2.0f)
+            {
+                moveState.lastAimYaw = moveState.targetYaw;
+                moveState.lastAimPitch = moveState.targetPitch;
+                Red::CallVirtual(this, "ApplyAimOnPuppet", entity.value(), moveState.targetYaw,
+                                 moveState.targetPitch);
+            }
         }
         break;
 
@@ -707,6 +754,73 @@ void NetworkGameSystem::PollIncomingMessages()
 
             // Unknown action values are ignored inside the redscript handler (forward compatibility).
             Red::CallVirtual(this, "PuppetAction", entity.value(), static_cast<uint32_t>(entity_action.action));
+        }
+        break;
+
+        case eEquipItemEntity:
+        {
+            EquipItemEntity equip_item = {};
+            if (zpp::bits::failure(in(equip_item)))
+            {
+                SDK->logger->Error(PLUGIN, "Faulty packet: EquipItemEntity");
+                pIncomingMsg->Release();
+                continue;
+            }
+
+            if (!m_networkedEntitiesLookup.contains(equip_item.networkedEntityId))
+            {
+                // Spawn race (measured 2026-07-31, session 1): the track-start snapshot arrives
+                // milliseconds after SpawnEntity, long before the async entity spawn registers
+                // in the lookup — dropping loses the state for the whole session. Buffer it;
+                // the teleport path applies it once the entity resolves.
+                m_pendingEquips[equip_item.networkedEntityId] = equip_item;
+                SDK->logger->InfoF(PLUGIN, "diag: equip for unknown entity %llu buffered",
+                                   equip_item.networkedEntityId);
+                break;
+            }
+
+            const auto equipEntityId = m_networkedEntitiesLookup[equip_item.networkedEntityId];
+            const auto equipEntity = Cyberverse::Utils::GetDynamicEntity(equipEntityId);
+            if (!equipEntity.has_value())
+            {
+                m_pendingEquips[equip_item.networkedEntityId] = equip_item;
+                SDK->logger->InfoF(PLUGIN, "diag: equip for unresolved entity %llu buffered",
+                                   equip_item.networkedEntityId);
+                break;
+            }
+
+            ApplyEquipPacket(equipEntity.value(), equipEntityId, equip_item);
+        }
+        break;
+
+        case eEntityShoot:
+        {
+            EntityShoot entity_shoot = {};
+            if (zpp::bits::failure(in(entity_shoot)))
+            {
+                SDK->logger->Error(PLUGIN, "Faulty packet: EntityShoot");
+                pIncomingMsg->Release();
+                continue;
+            }
+
+            if (!m_networkedEntitiesLookup.contains(entity_shoot.networkedEntityId))
+            {
+                // Packet race with spawn/despawn: drop, never crash (spec §5).
+                break;
+            }
+
+            const auto shooterEntityId = m_networkedEntitiesLookup[entity_shoot.networkedEntityId];
+            const auto shooter = Cyberverse::Utils::GetDynamicEntity(shooterEntityId);
+            if (!shooter.has_value())
+            {
+                break;
+            }
+
+            SDK->logger->TraceF(PLUGIN, "diag: entity %llu shot weapon %llu", entity_shoot.networkedEntityId,
+                                entity_shoot.itemIdWeapon);
+            const auto& shooterMoveState = m_movementState[shooterEntityId];
+            Red::CallVirtual(this, "ApplyShootOnPuppet", shooter.value(), shooterMoveState.targetYaw,
+                             shooterMoveState.targetPitch, entity_shoot.charge);
         }
         break;
 
@@ -772,6 +886,24 @@ bool NetworkGameSystem::OnGameRestored()
     return res;
 }
 
+void NetworkGameSystem::ApplyEquipPacket(const Red::Handle<Red::Entity>& entity,
+                                         const RED4ext::ent::EntityID entityId, const EquipItemEntity& equip)
+{
+    SDK->logger->InfoF(PLUGIN, "diag: entity %llu equip slot %llu item %llu unequip=%d",
+                       equip.networkedEntityId, equip.slot, equip.itemId, equip.isUnequipping ? 1 : 0);
+    Red::CallVirtual(this, "ApplyEquipOnPuppet", entity, RED4ext::TweakDBID(equip.slot),
+                     RED4ext::TweakDBID(equip.itemId), equip.isUnequipping);
+    auto& moveState = m_movementState[entityId];
+    moveState.weaponDrawn = !equip.isUnequipping;
+    if (equip.isUnequipping)
+    {
+        Red::CallVirtual(this, "ClearAimOnPuppet", entity);
+        // Force a fresh LookAt on the next draw.
+        moveState.lastAimYaw = 999.0f;
+        moveState.lastAimPitch = 999.0f;
+    }
+}
+
 void NetworkGameSystem::TrackPlayerPosition(float deltaTime)
 {
     m_TimeSinceLastPlayerPositionSync += deltaTime;
@@ -787,7 +919,20 @@ void NetworkGameSystem::TrackPlayerPosition(float deltaTime)
     const auto orientation = Cyberverse::Utils::Entity_GetWorldOrientation(player);
     const auto [Roll, Pitch, Yaw] = Cyberverse::Utils::Quaternion_ToEulerAngles(orientation);
 
-    const PlayerPositionUpdate position_update = { {  X, Y, Z }, Yaw};
+    // The puppet transform has pitch=0; the aim pitch lives in the FPP camera's local
+    // orientation (player.script:1503 GetFPPCameraComponent, orphans:16656 GetLocalOrientation).
+    float cameraPitch = 0.0f;
+    RED4ext::Handle<RED4ext::IScriptable> fppCamera;
+    Red::CallVirtual(player, "GetFPPCameraComponent", fppCamera);
+    if (fppCamera)
+    {
+        RED4ext::Quaternion camOrientation = {};
+        Red::CallVirtual(fppCamera, "GetLocalOrientation", camOrientation);
+        const auto camAngles = Cyberverse::Utils::Quaternion_ToEulerAngles(camOrientation);
+        cameraPitch = camAngles.Pitch;
+    }
+
+    const PlayerPositionUpdate position_update = { {  X, Y, Z }, Yaw, cameraPitch};
     this->EnqueueMessage(1, position_update);
 }
 

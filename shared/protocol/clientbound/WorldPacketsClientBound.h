@@ -34,6 +34,7 @@ struct TeleportEntity
     uint64_t networkedEntityId;
     Vector3 targetPosition;
     float yaw; // NPCs (i.e. players) only have a yaw that you can set anyway, not a full rotation.
+    float pitch; // aim pitch in degrees, drives the puppet's upper-body LookAt (not the transform)
 
     inline static void FillMessageFrame(MessageFrame& frame)
     {
@@ -67,5 +68,19 @@ struct EquipItemEntity {
     {
         frame.message_type = eEquipItemEntity;
         frame.channel_id = 0; // TODO
+    }
+};
+
+// Relays a serverbound PlayerShoot to the clients tracking the shooter's puppet.
+struct EntityShoot {
+    uint64_t networkedEntityId;
+    uint64_t itemIdWeapon;
+    Vector3 startPoint;
+    float charge;
+
+    inline static void FillMessageFrame(MessageFrame& frame)
+    {
+        frame.message_type = eEntityShoot;
+        frame.channel_id = 1;
     }
 };

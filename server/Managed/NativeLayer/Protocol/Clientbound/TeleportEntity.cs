@@ -11,6 +11,7 @@ public struct TeleportEntity: IClientBoundPacket
     public ulong networkedEntityId;
     public Vector3 targetPosition;
     public float yaw; // NPCs (i.e. players) only have a yaw that you can set anyway, not a full rotation.
-    
+    public float pitch; // aim pitch in degrees, drives the puppet's upper-body LookAt (not the transform)
+
     public EMessageTypeClientbound GetMessageType() => EMessageTypeClientbound.TeleportEntity;
 }

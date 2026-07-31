@@ -10,6 +10,7 @@ struct Pose
 {
     Vector3 position;
     float yaw; // degrees, like the real client (EulerAngles.Yaw)
+    float pitch = 0.0f; // degrees, aim pitch (real client: FPP camera local orientation)
 };
 
 // Tick-driven movement pattern for one bot. Produces a Pose per tick.

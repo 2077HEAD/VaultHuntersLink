@@ -36,6 +36,8 @@ public:
     void PollIncomingMessages();
     void SendTick(float dt); // behavior update + PlayerPositionUpdate while Running
     void SendJump();         // PlayerActionTracked(jump) at the current position
+    void SendShoot();        // PlayerShoot with the configured weapon at the current position
+    void SendEquip();        // PlayerEquipItem drawing the configured weapon
     void Close(const char* reason);
 
     State GetState() const { return m_state; }
@@ -64,6 +66,31 @@ public:
         m_despawnsReceived = 0;
         return count;
     }
+    uint64_t ConsumeEquipCount()
+    {
+        const auto count = m_equipsReceived;
+        m_equipsReceived = 0;
+        return count;
+    }
+    uint64_t ConsumeShotCount()
+    {
+        const auto count = m_shotsReceived;
+        m_shotsReceived = 0;
+        return count;
+    }
+
+    // Weapon sync: TweakDBID of the weapon this bot "draws" after joining (0 = unarmed).
+    // equipDelay > 0 postpones the draw by that many seconds after entering Running —
+    // isolates mid-spawn equip effects from equip-on-initialized-puppet (2026-07-31).
+    void SetWeapon(const uint64_t weaponTdbid, const float equipDelay = 0.0f)
+    {
+        m_weaponTdbid = weaponTdbid;
+        m_equipDelay = equipDelay;
+    }
+
+    // TweakDBID value for a record name: crc32(name) | (len << 32) — same packing as
+    // RED4ext::TweakDBID {hash:u32, length:u8}. Lets the harness compute real record ids.
+    static uint64_t TdbId(const char* name);
 
     // GNS delivers status changes through a single static callback; dispatch by handle.
     static void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
@@ -108,6 +135,12 @@ private:
     uint64_t m_actionsReceived = 0;
     uint64_t m_spawnsReceived = 0;
     uint64_t m_despawnsReceived = 0;
+    uint64_t m_equipsReceived = 0;
+    uint64_t m_shotsReceived = 0;
+    uint64_t m_weaponTdbid = 0;
+    float m_equipDelay = 0.0f;   // seconds after Running before the equip is sent
+    bool m_equipSent = false;
+    float m_elapsed = 0.0f; // running time, drives the armed-bot aim-pitch oscillation
 
     static std::unordered_map<HSteamNetConnection, BotClient*> s_byConnection;
 };

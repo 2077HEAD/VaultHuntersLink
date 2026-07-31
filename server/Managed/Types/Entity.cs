@@ -18,8 +18,13 @@ public class Entity
     public ulong RecordId;
     public Vector3 WorldTransform;
     public float Yaw;
+    public float Pitch; // aim pitch in degrees, relayed alongside Yaw in TeleportEntity
     // TODO: Remove and derive from recordId
     public bool IsVehicle;
+    // Drawn-weapon state (weapon sync spec §2): equipment is player STATE, not a world entity.
+    // 0/0 = nothing drawn. Slot/item are raw TweakDBID values as sent by the client.
+    public ulong DrawnWeaponSlot;
+    public ulong DrawnWeaponItemId;
 
     public Entity(ulong entityId, ulong recordId)
     {
