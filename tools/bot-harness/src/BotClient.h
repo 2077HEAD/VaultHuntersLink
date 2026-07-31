@@ -64,6 +64,19 @@ public:
         m_despawnsReceived = 0;
         return count;
     }
+    uint64_t ConsumeEquipCount()
+    {
+        const auto count = m_equipsReceived;
+        m_equipsReceived = 0;
+        return count;
+    }
+
+    // Weapon sync: TweakDBID of the weapon this bot "draws" right after joining (0 = unarmed).
+    void SetWeapon(const uint64_t weaponTdbid) { m_weaponTdbid = weaponTdbid; }
+
+    // TweakDBID value for a record name: crc32(name) | (len << 32) — same packing as
+    // RED4ext::TweakDBID {hash:u32, length:u8}. Lets the harness compute real record ids.
+    static uint64_t TdbId(const char* name);
 
     // GNS delivers status changes through a single static callback; dispatch by handle.
     static void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);
@@ -108,6 +121,8 @@ private:
     uint64_t m_actionsReceived = 0;
     uint64_t m_spawnsReceived = 0;
     uint64_t m_despawnsReceived = 0;
+    uint64_t m_equipsReceived = 0;
+    uint64_t m_weaponTdbid = 0;
 
     static std::unordered_map<HSteamNetConnection, BotClient*> s_byConnection;
 };

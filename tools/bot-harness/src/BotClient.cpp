@@ -7,6 +7,23 @@
 
 std::unordered_map<HSteamNetConnection, BotClient*> BotClient::s_byConnection;
 
+uint64_t BotClient::TdbId(const char* name)
+{
+    // Standard reflected CRC-32 (poly 0xEDB88320), the hash the RED engine uses for TweakDBIDs.
+    uint32_t crc = 0xFFFFFFFFu;
+    size_t len = 0;
+    for (const char* p = name; *p != '\0'; ++p, ++len)
+    {
+        crc ^= static_cast<uint8_t>(*p);
+        for (int bit = 0; bit < 8; ++bit)
+        {
+            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+        }
+    }
+    crc ^= 0xFFFFFFFFu;
+    return static_cast<uint64_t>(crc) | (static_cast<uint64_t>(len & 0xFF) << 32);
+}
+
 BotClient::BotClient(const int index, ISteamNetworkingSockets* iface, Behavior behavior)
     : m_index(index), m_iface(iface), m_behavior(behavior)
 {
@@ -139,6 +156,22 @@ void BotClient::HandleMessage(const void* data, const size_t size)
             if (Send(join))
             {
                 m_state = State::Running;
+
+                // Weapon sync: draw the configured weapon right after joining. Same reliable
+                // stream as the join packet, so the server sees the puppet first.
+                if (m_weaponTdbid != 0)
+                {
+                    PlayerEquipItem equip = {};
+                    equip.slot = TdbId("AttachmentSlots.WeaponRight");
+                    equip.itemId = m_weaponTdbid;
+                    equip.isWeapon = true;
+                    equip.isUnequipping = false;
+                    if (Send(equip))
+                    {
+                        std::printf("[%s] drew weapon %llu\n", m_name.c_str(),
+                                    static_cast<unsigned long long>(m_weaponTdbid));
+                    }
+                }
             }
         }
         else
@@ -205,8 +238,23 @@ void BotClient::HandleMessage(const void* data, const size_t size)
     }
     break;
 
+    case eEquipItemEntity:
+    {
+        EquipItemEntity equip = {};
+        if (zpp::bits::failure(in(equip)))
+        {
+            std::fprintf(stderr, "[%s] faulty packet: EquipItemEntity\n", m_name.c_str());
+            return;
+        }
+        m_equipsReceived++;
+        std::printf("[%s] peer equip: entity %llu slot %llu item %llu unequip=%d\n", m_name.c_str(),
+                    static_cast<unsigned long long>(equip.networkedEntityId),
+                    static_cast<unsigned long long>(equip.slot),
+                    static_cast<unsigned long long>(equip.itemId), equip.isUnequipping ? 1 : 0);
+    }
+    break;
+
     default:
-        // e.g. eEquipItemEntity — irrelevant for v1
         break;
     }
 }

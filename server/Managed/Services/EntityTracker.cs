@@ -219,6 +219,21 @@ public class EntityTracker
             spawnPosition = entity.WorldTransform
         };
         _sink.EnqueueMessage(EMessageTypeClientbound.SpawnEntity, player.ConnectionId, 1, spawnEntity);
+
+        // Late-joiner correctness (weapon sync spec §2): equipment is state, not an event log —
+        // whoever starts tracking an armed puppet gets the current equip state right away.
+        if (entity.DrawnWeaponItemId != 0)
+        {
+            var equipSnapshot = new EquipItemEntity
+            {
+                NetworkedEntityId = entity.NetworkedEntityId,
+                Slot = entity.DrawnWeaponSlot,
+                ItemId = entity.DrawnWeaponItemId,
+                isWeapon = true,
+                isUnequipping = false
+            };
+            _sink.EnqueueMessage(EMessageTypeClientbound.EquipItemEntity, player.ConnectionId, 1, equipSnapshot);
+        }
     }
 
     public void OnStopTrackingEntity(Player player, Entity entity)

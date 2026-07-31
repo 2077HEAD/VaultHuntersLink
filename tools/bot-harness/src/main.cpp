@@ -35,6 +35,7 @@ struct Options
     float hz = 10.0f;
     float jumpEvery = 0.0f; // seconds between jump actions per bot; 0 = never
     float boundaryDistance = 440.0f; // oscillation center distance for the boundary pattern
+    uint64_t weaponTdbid = 0; // weapon each bot draws after joining; 0 = unarmed
 };
 
 bool ParseArgs(const int argc, char** argv, Options& options)
@@ -131,12 +132,28 @@ bool ParseArgs(const int argc, char** argv, Options& options)
             if (!value) return false;
             options.boundaryDistance = static_cast<float>(std::atof(value));
         }
+        else if (arg == "--weapon")
+        {
+            const auto value = next();
+            if (!value) return false;
+            // Numeric (decimal/0x-hex) TweakDBID value, or a record name like
+            // "Items.Preset_Ajax_Default" which gets hashed the way the RED engine does.
+            char* end = nullptr;
+            options.weaponTdbid = std::strtoull(value, &end, 0);
+            if (end == value || *end != '\0')
+            {
+                options.weaponTdbid = BotClient::TdbId(value);
+                std::printf("weapon record \"%s\" -> tdbid %llu\n", value,
+                            static_cast<unsigned long long>(options.weaponTdbid));
+            }
+        }
         else
         {
             std::fprintf(stderr,
                          "usage: bot-harness [--server 127.0.0.1] [--port 1337] [--count 8]\n"
                          "                   [--pattern circle|random|boundary|static|strafe|backpedal] [--center x,y,z] [--hz 10]\n"
-                         "                   [--jump-every <seconds>] [--distance <m, boundary pattern>]\n");
+                         "                   [--jump-every <seconds>] [--distance <m, boundary pattern>]\n"
+                         "                   [--weapon <tdbid-u64 | record name, e.g. Items.Preset_Ajax_Default>]\n");
             return false;
         }
     }
@@ -160,6 +177,11 @@ const char* StateName(const BotClient::State state)
 
 int main(const int argc, char** argv)
 {
+    // Stats/diagnostics get tailed live from a redirected log; a pipe-buffered stdout
+    // loses everything on a hard kill (observed 2026-07-31: empty logs after Stop-Process).
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
+
     Options options;
     if (!ParseArgs(argc, argv, options))
     {
@@ -199,6 +221,7 @@ int main(const int argc, char** argv)
     {
         auto bot = std::make_unique<BotClient>(i, iface,
                                                Behavior(options.pattern, options.center, i, options.boundaryDistance));
+        bot->SetWeapon(options.weaponTdbid);
         bot->Connect(address);
         bots.push_back(std::move(bot));
     }
@@ -250,7 +273,7 @@ int main(const int argc, char** argv)
             statsAccumulator = 0.0f;
 
             int running = 0, dead = 0;
-            uint64_t teleports = 0, actions = 0, spawns = 0, despawns = 0;
+            uint64_t teleports = 0, actions = 0, spawns = 0, despawns = 0, equips = 0;
             for (const auto& bot : bots)
             {
                 if (bot->GetState() == BotClient::State::Running) running++;
@@ -259,11 +282,12 @@ int main(const int argc, char** argv)
                 actions += bot->ConsumeActionCount();
                 spawns += bot->ConsumeSpawnCount();
                 despawns += bot->ConsumeDespawnCount();
+                equips += bot->ConsumeEquipCount();
             }
-            std::printf("stats: %d/%zu running, %d dead, %llu teleports, %llu actions, %llu spawns, %llu despawns received/s\n",
+            std::printf("stats: %d/%zu running, %d dead, %llu teleports, %llu actions, %llu spawns, %llu despawns, %llu equips received/s\n",
                         running, bots.size(), dead, static_cast<unsigned long long>(teleports),
                         static_cast<unsigned long long>(actions), static_cast<unsigned long long>(spawns),
-                        static_cast<unsigned long long>(despawns));
+                        static_cast<unsigned long long>(despawns), static_cast<unsigned long long>(equips));
 
             if (dead == static_cast<int>(bots.size()))
             {

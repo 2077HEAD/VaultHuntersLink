@@ -159,44 +159,47 @@ public class PlayerPacketHandler
     private void HandleEquip(GameServer server, EMessageTypeServerbound messageType, byte channelId,
         uint connectionId, PlayerEquipItem content)
     {
-        Logger.Info($"Player did (un: {content.isUnequipping})equip an item (slot {content.slot}). Is it a weapon? {content.isWeapon}");
+        // Weapon sync spec §2: equipment is player state on the puppet entity, no world entity.
+        if (!_players!.ConnectedPlayers.TryGetValue(connectionId, out var player) || player.PuppetEntity == null)
+        {
+            Logger.Warn($"PlayerEquipItem from connection {connectionId} without a puppet, dropping");
+            return;
+        }
+
+        var puppet = player.PuppetEntity;
         if (content.isUnequipping)
         {
-            // Try to find existing cars for that owner.
-            var existingItems = server.EntityService.SpawnedEntities
-                .Select(x => x.Value)
-                .Where(x => x.NetworkIdOwner == connectionId)
-                .Where(x => x.RecordId == content.itemId)
-                .ToList();
-
-            // TODO: As long as we don't have NetworkedEntityIds, we need to unequip all of those.
-            foreach (var item in existingItems)
-            {
-                item.NetworkIdOwner = 0;
-                _tracker!.StopTrackingOf(item);
-                server.EntityService.RemoveEntity(item.NetworkedEntityId);
-            }
-        }
-        else
-        {
-            // TODO: How are we supposed to flag things as items? dedicated maps? But it'll still be entities in the end.
-            // Also this is relevant when we have our own EquipItemEntity. Right now they are entities in the world.
-            var playerEntity = server.EntityService.SpawnedEntities
-                .Select(x => x.Value)
-                .FirstOrDefault(x => x.NetworkIdOwner == connectionId);
-
-            if (playerEntity == null)
+            // Idempotent: unequip of an empty/other slot state is a no-op state-wise.
+            if (puppet.DrawnWeaponSlot != content.slot)
             {
                 return;
             }
-            
-            var entity = server.EntityService.CreateEntity(content.itemId);
-            entity.WorldTransform = playerEntity.WorldTransform; // TODO
-            entity.Yaw = playerEntity.Yaw; // TODO
-            entity.NetworkIdOwner = connectionId;
-            entity.IsVehicle = false;
+            puppet.DrawnWeaponSlot = 0;
+            puppet.DrawnWeaponItemId = 0;
+        }
+        else
+        {
+            if (puppet.DrawnWeaponSlot == content.slot && puppet.DrawnWeaponItemId == content.itemId)
+            {
+                return;
+            }
+            puppet.DrawnWeaponSlot = content.slot;
+            puppet.DrawnWeaponItemId = content.itemId;
+        }
 
-            _tracker!.UpdateTrackingOf(entity);
+        Logger.Info($"Equip state {player.Name}: slot {content.slot} item {content.itemId} unequip={content.isUnequipping}");
+
+        var equip = new EquipItemEntity
+        {
+            NetworkedEntityId = puppet.NetworkedEntityId,
+            Slot = content.slot,
+            ItemId = content.itemId,
+            isWeapon = content.isWeapon,
+            isUnequipping = content.isUnequipping
+        };
+        foreach (var trackingConnectionId in _tracker!.GetPlayersTracking(puppet.NetworkedEntityId))
+        {
+            server.EnqueueMessage(EMessageTypeClientbound.EquipItemEntity, trackingConnectionId, channelId, equip);
         }
     }
 
