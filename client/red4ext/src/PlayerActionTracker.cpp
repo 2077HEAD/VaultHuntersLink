@@ -42,10 +42,30 @@ void PlayerActionTracker::TrackJump()
 
 void PlayerActionTracker::OnShoot(RED4ext::Handle<RED4ext::gameprojectileShootEvent> event)
 {
+    // The hook sits on BaseProjectile, so EVERY projectile in the world lands here — NPC
+    // bullets, remote-puppet shots (AIWeapon.Fire, Task 6) included. Only the local player's
+    // own shots may become packets, otherwise remote fire echoes back as a feedback loop.
+    const auto owner = event->owner.Lock();
+    const auto player = Cyberverse::Utils::GetPlayer();
+    if (!owner || !player || owner.GetPtr() != player.GetPtr())
+    {
+        return;
+    }
+
+    // Weapon identity from the event (upstream left this TODO; the comment used to swallow
+    // the EnqueueMessage line as the assignment's right-hand side).
+    uint64_t weaponTdbid = 0;
+    if (const auto weapon = event->weapon.Lock())
+    {
+        RED4ext::ItemID itemId = {};
+        Red::CallVirtual(weapon, "GetItemID", itemId);
+        weaponTdbid = itemId.tdbid.value;
+    }
+
     PlayerShoot player_shoot = {};
     player_shoot.charge = event->params.charge;
     player_shoot.startPoint = Vector3 { event->startPoint.X, event->startPoint.Y, event->startPoint.Z };
-    player_shoot.itemIdWeapon = // TODO: FILL
+    player_shoot.itemIdWeapon = weaponTdbid;
     Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, player_shoot);
 }
 

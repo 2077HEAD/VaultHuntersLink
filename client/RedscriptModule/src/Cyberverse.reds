@@ -84,13 +84,18 @@ protected cb func OnUnmountingEvent(evt: ref<UnmountingEvent>) -> Bool {
 // protected cb func OnWeaponEquipEvent(evt: ref<WeaponEquipEvent>) -> Bool {
 @wrapMethod(PlayerPuppet)
 public final func OnItemEquipped(slot: TweakDBID, item: ItemID) -> Void {
-    let isWeapon = RPGManager.IsItemWeapon(item);
+    // Cyberware weapons (mantis blades & co.) are category Cyberware, not Weapon — but they
+    // land in AttachmentSlots.WeaponRight like any gun (vanilla prereqs.script:454), so the
+    // flag must cover both. The pipeline itself never filters on isWeapon.
+    let isWeapon = RPGManager.IsItemWeapon(item)
+        || RPGManager.IsItemTypeCyberwareWeapon(RPGManager.GetItemType(item));
     GameInstance.GetNetworkGameSystem().playerActionTracker.OnItemEquipped(slot, item, isWeapon);
 }
 
 @wrapMethod(PlayerPuppet)
 public final func OnItemUnequipped(slot: TweakDBID, item: ItemID) -> Void {
-    let isWeapon = RPGManager.IsItemWeapon(item);
+    let isWeapon = RPGManager.IsItemWeapon(item)
+        || RPGManager.IsItemTypeCyberwareWeapon(RPGManager.GetItemType(item));
     GameInstance.GetNetworkGameSystem().playerActionTracker.OnItemUnequipped(slot, item, isWeapon);
 }
 
