@@ -19,6 +19,9 @@ public:
     /// Called from the JumpEvents.OnEnter wrap — fires on the actual locomotion jump, not the button.
     void TrackJump();
     void OnShoot(RED4ext::Handle<RED4ext::gameprojectileShootEvent> event);
+    /// Called from the player PSM's ShootEvents.OnEnter wrap — the only path that covers
+    /// hitscan weapons (BaseProjectile.OnShoot never fires for them, choomlink-77e8).
+    void OnPlayerShoot(RED4ext::ItemID item, RED4ext::Vector4 startPoint);
     void OnHit(RED4ext::Handle<RED4ext::GameObject> gameObject, RED4ext::Handle<RED4ext::gameHitEvent> event);
     void OnMounting(RED4ext::Handle<RED4ext::game::mounting::MountingEvent> event);
     void OnUnmounting(RED4ext::Handle<RED4ext::game::mounting::UnmountingEvent> event);
@@ -33,6 +36,7 @@ RTTI_DEFINE_CLASS(PlayerActionTracker, {
     RTTI_METHOD(RecordPlayerAction);
     RTTI_METHOD(TrackJump);
     RTTI_METHOD(OnShoot);
+    RTTI_METHOD(OnPlayerShoot);
     RTTI_METHOD(OnHit);
     RTTI_METHOD(OnMounting);
     RTTI_METHOD(OnUnmounting);
