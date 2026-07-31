@@ -320,6 +320,16 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
                 Red::CallVirtual(this, "StopActionAnim", state.walkAnim);
                 state.walkAnim.Reset();
             }
+
+            // A standing player still turns their camera: yaw keeps streaming in the movement
+            // packets, but without teleport commands the puppet's facing froze (live two-client
+            // finding 2026-07-31). Rotation-only update in place when the yaw moved.
+            if (state.hasTarget && std::abs(state.targetYaw - state.lastIdleYaw) > 3.0f)
+            {
+                state.lastIdleYaw = state.targetYaw;
+                const RED4ext::Vector4 standingPos = { pos.X, pos.Y, pos.Z, 1.0f };
+                Red::CallVirtual(this, "KinematicMove", entity.value(), standingPos, state.targetYaw);
+            }
             continue;
         }
 

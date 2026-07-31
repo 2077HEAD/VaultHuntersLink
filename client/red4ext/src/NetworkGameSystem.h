@@ -49,6 +49,8 @@ private:
         bool weaponDrawn = false;        // remote equip state (EquipItemEntity), gates the aim LookAt
         float lastAimYaw = 999.0f;       // last yaw/pitch applied as LookAt (999 = never applied,
         float lastAimPitch = 999.0f;     // forces the first apply once a weapon is drawn)
+        float lastIdleYaw = 999.0f;      // last yaw applied while STANDING (idle path skips
+                                         // teleports, so camera turns froze the body facing)
         // D3 lateral-clip unlock (2026-07-29): whether the AnimationControllerComponent
         // SetInputBool calls that make the combat locomotion animset loadable have been sent
         // for this puppet yet (send once — see DriveLocomotionFeed).
