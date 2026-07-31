@@ -422,6 +422,9 @@ void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& enti
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("MeleeWeapon"), true);
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("combatLocomotion"), true);
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("WeaponRight"), true);
+        // Weapon sync: make the puppet a valid target (attitude neutral, not Judy-friendly) —
+        // same one-shot setup point as the animset inputs.
+        Red::CallVirtual(this, "SetupPuppetAttitude", entity);
         SDK->logger->InfoF(PLUGIN, "diag: combat-locomotion animset inputs set on entity");
     }
 

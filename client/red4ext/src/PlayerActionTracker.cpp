@@ -42,15 +42,10 @@ void PlayerActionTracker::TrackJump()
 
 void PlayerActionTracker::OnShoot(RED4ext::Handle<RED4ext::gameprojectileShootEvent> event)
 {
-    // The hook sits on BaseProjectile, so EVERY projectile in the world lands here — NPC
-    // bullets, remote-puppet shots (AIWeapon.Fire, Task 6) included. Only the local player's
-    // own shots may become packets, otherwise remote fire echoes back as a feedback loop.
-    const auto owner = event->owner.Lock();
-    const auto player = Cyberverse::Utils::GetPlayer();
-    if (!owner || !player || owner.GetPtr() != player.GetPtr())
-    {
-        return;
-    }
+    // Local-shot filtering happens in the redscript wrapper (Cyberverse.reds OnShoot): the
+    // projectile owner is the wielder for some weapons but the WEAPON object for others, and
+    // that check is natural in reds (TransactionSystem slot compare). Everything arriving
+    // here is already attributed to the local player.
 
     // Weapon identity from the event (upstream left this TODO; the comment used to swallow
     // the EnqueueMessage line as the assignment's right-hand side).

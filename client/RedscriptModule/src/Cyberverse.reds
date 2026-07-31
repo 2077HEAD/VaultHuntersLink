@@ -102,8 +102,23 @@ public final func OnItemUnequipped(slot: TweakDBID, item: ItemID) -> Void {
 @wrapMethod(BaseProjectile)
 protected cb func OnShoot(eventData: ref<gameprojectileShootEvent>) -> Bool {
     wrappedMethod(eventData);
-    FTLog("Shoot");
-    GameInstance.GetNetworkGameSystem().playerActionTracker.OnShoot(eventData);
+    // Only the local player's own shots become packets (NPC/remote-puppet projectiles land
+    // here too — without this filter remote fire would echo back as a feedback loop).
+    // The projectile owner is the WIELDER for some weapons but the WEAPON object for others
+    // (measured 2026-07-31: player shots never passed a wielder-only filter) — accept both.
+    let player = GameInstance.GetPlayerSystem(this.GetGame()).GetLocalPlayerControlledGameObject();
+    if !IsDefined(player) {
+        return true;
+    }
+    let isLocal = IsDefined(eventData.owner) && eventData.owner == player;
+    if !isLocal && IsDefined(eventData.weapon) {
+        let playerWeapon = GameInstance.GetTransactionSystem(this.GetGame())
+            .GetItemInSlot(player, t"AttachmentSlots.WeaponRight");
+        isLocal = IsDefined(playerWeapon) && eventData.weapon == playerWeapon;
+    }
+    if isLocal {
+        GameInstance.GetNetworkGameSystem().playerActionTracker.OnShoot(eventData);
+    }
 }
 
 @wrapMethod(BaseProjectile)

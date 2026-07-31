@@ -308,6 +308,20 @@ public native class NetworkGameSystem extends IGameSystem {
         FTLog(s"[ChoomLink] remote shot for puppet \(EntityID.GetHash(puppet.GetEntityID()))");
     }
 
+    // Remote players must be shootable: the Judy-derived record is attitude-Friendly, which
+    // engages the game's weapon-safe trigger lock when aiming at them (scriptedPuppet.script:
+    // 3856 checks AIA_Friendly). Neutral keeps them non-hostile but a valid target.
+    public func SetupPuppetAttitude(entity: ref<Entity>) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        let agent = puppet.GetAttitudeAgent();
+        if IsDefined(agent) {
+            agent.SetAttitudeGroup(n"neutral");
+        }
+    }
+
     public func ClearAimOnPuppet(entity: ref<Entity>) {
         let puppet = entity as ScriptedPuppet;
         if !IsDefined(puppet) {
