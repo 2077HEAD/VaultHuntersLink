@@ -337,7 +337,8 @@ public native class NetworkGameSystem extends IGameSystem {
     //   1 = fired, ranged attack derived from the weapon record as a fallback
     //   2 = fired WITHOUT any ranged attack -> the projectile carries no damage payload
     //   3 = no weapon in the slot   4 = not a puppet   5 = weapon not attached
-    public func ApplyShootOnPuppet(entity: ref<Entity>, yaw: Float, pitch: Float, charge: Float) -> Int32 {
+    public func ApplyShootOnPuppet(entity: ref<Entity>, yaw: Float, pitch: Float, charge: Float,
+                                   damagePerHit: Float) -> Int32 {
         let puppet = entity as ScriptedPuppet;
         if !IsDefined(puppet) {
             return 4;
@@ -353,6 +354,10 @@ public native class NetworkGameSystem extends IGameSystem {
         if !weapon.IsAttached() {
             return 5;
         }
+        // Schadenszahl des Schuetzen merken - der Wrap auf DamageSystem.Process holt sie sich
+        // beim Treffer von hier ab.
+        puppet.choomlink_lastShotDamage = damagePerHit;
+
         let target = this.AimTargetFor(puppet, yaw, pitch, 50.0);
 
         // Why no `target` argument (7th) even though we have the local player right here:
@@ -510,6 +515,12 @@ let choomlink_aimLookAt: ref<LookAtAddEvent>;
 // churn the tracker at the weapon's fire rate.
 @addField(ScriptedPuppet)
 let choomlink_threatRegistered: Bool;
+
+// Waffenschaden des letzten relayten Schusses dieses Puppets. Der Schuetze liest ihn auf seinem
+// eigenen Rechner (dort hat die Waffe echte Stats) und schickt ihn mit; die Schadenspipeline des
+// Opfers greift ihn beim Treffer ab. Siehe den DamageSystem.Process-Wrap in Cyberverse.reds.
+@addField(ScriptedPuppet)
+let choomlink_lastShotDamage: Float;
 
 @addMethod(GameInstance)
 public static native func GetNetworkGameSystem() -> ref<NetworkGameSystem>

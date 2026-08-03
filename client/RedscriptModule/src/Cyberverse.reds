@@ -146,8 +146,16 @@ protected final func OnEnter(stateContext: ref<StateContext>, scriptInterface: r
     wrappedMethod(stateContext, scriptInterface);
     let weapon = this.GetWeaponObject(scriptInterface);
     if IsDefined(weapon) {
+        // Den Schadenswert HIER lesen, nicht beim Empfaenger: nur auf dem Rechner des Schuetzen
+        // ist das eine echte Waffe mit ausgewuerfelten Stats. Beim Empfaenger haengt dieselbe
+        // Waffe an einem NPC-Puppet und meldet 0 (gemessen 2026-08-03) — das war die Ursache,
+        // dass jeder Treffer landete und sich zu null rechnete.
+        // Stat-Quelle wie in damageSystem.script:2606.
+        let stats = GameInstance.GetStatsSystem(weapon.GetGame());
+        let dmg = stats.GetStatValue(Cast<StatsObjectID>(weapon.GetEntityID()),
+                                     gamedataStatType.EffectiveDamagePerHit);
         GameInstance.GetNetworkGameSystem().playerActionTracker
-            .OnPlayerShoot(weapon.GetItemID(), scriptInterface.executionOwner.GetWorldPosition());
+            .OnPlayerShoot(weapon.GetItemID(), scriptInterface.executionOwner.GetWorldPosition(), dmg);
     }
 }
 
@@ -273,6 +281,41 @@ protected cb func OnDamageReceived(evt: ref<gameDamageReceivedEvent>) -> Bool {
         GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(12, evt.totalDamageReceived);
     }
     return result;
+}
+
+// Schadenszahl eines relayten Schusses in die Vanilla-Pipeline einsetzen (choomlink-2hum).
+//
+// WARUM HIER UND NICHT AN DER WAFFE: auf dem Rechner des Opfers haengt die Waffe an einem
+// NPC-Puppet und traegt keine ausgewuerfelten Stats — gemessen 2026-08-03, EffectiveDamagePerHit
+// ist dort 0. Also stempelt `ModifyHitData` den Treffer mit hitFlag.DealNoDamage
+// (damageSystem.script:308) und `Process` steigt sofort aus (:561). Jeder Schuss traf und
+// rechnete sich zu null. Der Schuetze dagegen kennt die echte Zahl, es ist seine eigene Waffe;
+// er schickt sie im EntityShoot-Paket mit.
+//
+// WAS DAS NICHT IST: eine erfundene Konstante. Wir setzen ausschliesslich den Waffenschaden des
+// Schuetzen ein. Alles danach — Ruestung, Resistenzen, Schadensobergrenze, Trefferzone — rechnet
+// weiterhin die Pipeline des OPFERS mit dessen eigenen Werten. Belegt am 2026-08-03: eingesetzte
+// 20 kamen als 13,66 an. Die Hoheit ueber die eigene Gesundheit bleibt damit lokal, wie in der
+// Spec festgelegt.
+//
+// Serverseitige Plausibilitaetspruefung (Obergrenze je Waffenklasse) ist der natuerliche
+// naechste Schritt gegen manipulierte Schuetzen und passt ohne Protokollaenderung auf dieses Feld.
+@wrapMethod(DamageSystem)
+private final func Process(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -> Void {
+    let instigator = hitEvent.attackData.GetInstigator();
+    let puppet = instigator as ScriptedPuppet;
+    if IsDefined(hitEvent.target) && hitEvent.target.IsPlayer()
+        && IsDefined(puppet) && !instigator.IsPlayer()
+        && puppet.choomlink_threatRegistered
+        && puppet.choomlink_lastShotDamage > 0.0
+        && IsDefined(hitEvent.attackComputed) {
+        hitEvent.attackData.RemoveFlag(hitFlag.DealNoDamage);
+        hitEvent.attackComputed.SetAttackValue(puppet.choomlink_lastShotDamage,
+                                               gamedataDamageType.Physical);
+        GameInstance.GetNetworkGameSystem().playerActionTracker
+            .LogDiag(15, puppet.choomlink_lastShotDamage);
+    }
+    wrappedMethod(hitEvent, cache);
 }
 
 // Fires when the locomotion state machine actually enters the jump state — unlike the Jump

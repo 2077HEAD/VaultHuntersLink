@@ -93,6 +93,7 @@ struct EntityShoot {
     uint64_t itemIdWeapon;
     Vector3 startPoint;
     float charge;
+    float damagePerHit; // see PlayerShoot::damagePerHit
 
     inline static void FillMessageFrame(MessageFrame& frame)
     {

@@ -65,7 +65,8 @@ void PlayerActionTracker::OnShoot(RED4ext::Handle<RED4ext::gameprojectileShootEv
     Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, player_shoot);
 }
 
-void PlayerActionTracker::OnPlayerShoot(const RED4ext::ItemID item, const RED4ext::Vector4 startPoint)
+void PlayerActionTracker::OnPlayerShoot(const RED4ext::ItemID item, const RED4ext::Vector4 startPoint,
+                                        const float damagePerHit)
 {
     // Comes from the player state machine's shoot state (vanilla weaponTransitions.script:1895
     // ShootEvents.OnEnter) — that PSM only ever runs for the local player, so no owner filter
@@ -74,7 +75,8 @@ void PlayerActionTracker::OnPlayerShoot(const RED4ext::ItemID item, const RED4ex
     player_shoot.charge = 1.0f;
     player_shoot.startPoint = Vector3 { startPoint.X, startPoint.Y, startPoint.Z };
     player_shoot.itemIdWeapon = item.tdbid.value;
-    SDK->logger->InfoF(PLUGIN, "diag: local shot (PSM), weapon %llu", item.tdbid.value);
+    player_shoot.damagePerHit = damagePerHit;
+    SDK->logger->InfoF(PLUGIN, "diag: local shot (PSM), weapon %llu dmg %.1f", item.tdbid.value, damagePerHit);
     Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, player_shoot);
 }
 

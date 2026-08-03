@@ -377,6 +377,10 @@ void BotClient::SendShoot()
     shoot.itemIdWeapon = m_weaponTdbid;
     shoot.startPoint = m_lastPose.position;
     shoot.charge = 1.0f;
+    // A real client reads this off its own weapon; a bot has none, so it reports a plausible
+    // rifle value. Non-zero on purpose: zero is exactly what a missing damage number looks like,
+    // and the whole point of the bot is to exercise the path a real shooter takes.
+    shoot.damagePerHit = 20.0f;
     Send(shoot);
 }
 

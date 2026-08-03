@@ -871,7 +871,7 @@ void NetworkGameSystem::PollIncomingMessages()
             const auto& shooterMoveState = m_movementState[shooterEntityId];
             int32_t shootStatus = -1;
             Red::CallVirtual(this, "ApplyShootOnPuppet", shootStatus, shooter.value(), shooterMoveState.targetYaw,
-                             shooterMoveState.targetPitch, entity_shoot.charge);
+                             shooterMoveState.targetPitch, entity_shoot.charge, entity_shoot.damagePerHit);
             static int32_t s_lastShootStatus = -99;
             if (shootStatus != s_lastShootStatus)
             {

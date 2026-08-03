@@ -218,7 +218,11 @@ public class PlayerPacketHandler
             NetworkedEntityId = senderEntity.NetworkedEntityId,
             ItemIdWeapon = content.itemIdWeapon,
             StartPoint = content.startPoint,
-            Charge = content.charge
+            Charge = content.charge,
+            // Relayed unmodified: the server has no weapon stats of its own to check against.
+            // Server-side plausibility (a cap per weapon class) is the natural place to add
+            // anti-cheat later and fits on this field without a protocol change.
+            DamagePerHit = content.damagePerHit
         };
         foreach (var trackingConnectionId in _tracker!.GetPlayersTracking(senderEntity.NetworkedEntityId))
         {

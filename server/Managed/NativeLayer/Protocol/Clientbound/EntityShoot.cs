@@ -10,6 +10,8 @@ public struct EntityShoot : IClientBoundPacket
     public ulong ItemIdWeapon;
     public Vector3 StartPoint;
     public float Charge;
+    /// <summary>Weapon damage per hit as reported by the shooter — see PlayerShoot.damagePerHit.</summary>
+    public float DamagePerHit;
 
     public EMessageTypeClientbound GetMessageType()
     {

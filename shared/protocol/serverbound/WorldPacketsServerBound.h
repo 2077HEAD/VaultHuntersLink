@@ -103,6 +103,12 @@ struct PlayerShoot {
     uint64_t itemIdWeapon;
     Vector3 startPoint;
     float charge;
+    // Weapon damage per hit, read from the shooter's own weapon (damage/health sync design
+    // 2026-08-03). The shooter is the only machine where this weapon has real, rolled stats:
+    // everywhere else it is an item handed to an NPC puppet, which carries none -- measured,
+    // the puppet's weapon reports 0. The victim still runs its own armour and resistance math
+    // on this number, so authority over the victim's health stays local.
+    float damagePerHit;
 
     inline static void FillMessageFrame(MessageFrame& frame)
     {
