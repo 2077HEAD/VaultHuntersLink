@@ -359,8 +359,8 @@ public native class NetworkGameSystem extends IGameSystem {
         // The cost is that both AI_ShootAt branches then hinge on IsPositionValid
         // (weapon.script:1572-1584); failing it drops to AI_ShootForwards, which fires along the
         // weapon's own forward axis and ignores the aim point entirely -- visible shot, no hit.
-        // That was the 2026-07-31 symptom. EnsureThreatRegistered below is what satisfies it.
-        this.EnsureThreatRegistered(puppet);
+        // That was the 2026-07-31 symptom. EnsureThreatRegistered is what satisfies it -- called
+        // from the C++ side before this, so its status ends up in the readable log.
 
         // Explicit ranged attack: without it SetAttackBasedOnTimeDilation dereferences
         // weapon.GetCurrentRangedAttack() unguarded (weapon.script:1643). On a puppet whose weapon
@@ -391,21 +391,37 @@ public native class NetworkGameSystem extends IGameSystem {
     //
     // isPersistent = true so a single registration lasts; accuracy 1.0 and no cooldown because
     // nothing here should modulate whether a player's shot lands -- geometry decides that.
-    private func EnsureThreatRegistered(puppet: ref<ScriptedPuppet>) -> Void {
+    // Returns a status code instead of logging: FTLog output only reaches the CET console window,
+    // never a file, so a redscript-side log is invisible to an automated check. The caller on the
+    // C++ side puts the code into the red4ext log, where a test run can actually read it.
+    //   0 = already registered   1 = registered now
+    //   2 = puppet has no target tracker   3 = no local player
+    public func EnsureThreatRegistered(entity: ref<Entity>) -> Int32 {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return 4;
+        }
         if puppet.choomlink_threatRegistered {
-            return;
+            return 0;
         }
         let tracker = puppet.GetTargetTrackerComponent();
         if !IsDefined(tracker) {
-            return;
+            return 2;
         }
         let player = GameInstance.GetPlayerSystem(puppet.GetGame()).GetLocalPlayerMainGameObject();
         if !IsDefined(player) {
-            return;
+            return 3;
         }
         tracker.AddThreat(player, true, player.GetWorldPosition(), 1.0, 0.0, true);
+        // Adding a threat is not the same as it being active/believed. Vanilla drives these
+        // separately (NPCPuppet.script:579 uses SetThreatBeliefAccuracy alongside persistence),
+        // and IsPositionValid is about a position the tracker currently *believes in*, not merely
+        // one it has heard of.
+        tracker.ActivateThreat(player);
+        tracker.SetThreatAccuracy(player, 1.0);
+        tracker.SetThreatBeliefAccuracy(player, 1.0);
         puppet.choomlink_threatRegistered = true;
-        FTLog(s"[ChoomLink] threat registered on puppet \(EntityID.GetHash(puppet.GetEntityID()))");
+        return 1;
     }
 
     // Remote players must be shootable: the Judy-derived record is attitude-Friendly, which

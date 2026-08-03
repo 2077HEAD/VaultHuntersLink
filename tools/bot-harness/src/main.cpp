@@ -39,6 +39,8 @@ struct Options
     float shootEvery = 0.0f;  // seconds between PlayerShoot per bot; 0 = never (needs --weapon)
     float equipDelay = 0.0f;  // seconds after join before drawing the weapon; 0 = immediately
     float bleedRate = 0.0f;   // percent health lost per second; 0 = don't report health at all
+    Vector3 aimTarget {};     // world point every bot aims at (yaw+pitch), instead of oscillating
+    bool hasAimTarget = false;
 };
 
 bool ParseArgs(const int argc, char** argv, Options& options)
@@ -156,6 +158,17 @@ bool ParseArgs(const int argc, char** argv, Options& options)
             if (!value) return false;
             options.shootEvery = static_cast<float>(std::atof(value));
         }
+        else if (arg == "--aim-at")
+        {
+            const auto value = next();
+            if (!value) return false;
+            if (sscanf_s(value, "%f,%f,%f", &options.aimTarget.x, &options.aimTarget.y, &options.aimTarget.z) != 3)
+            {
+                std::fprintf(stderr, "invalid --aim-at \"%s\", expected x,y,z\n", value);
+                return false;
+            }
+            options.hasAimTarget = true;
+        }
         else if (arg == "--bleed")
         {
             const auto value = next();
@@ -175,7 +188,9 @@ bool ParseArgs(const int argc, char** argv, Options& options)
                          "                   [--pattern circle|random|boundary|static|strafe|backpedal] [--center x,y,z] [--hz 10]\n"
                          "                   [--jump-every <seconds>] [--distance <m, boundary pattern>]\n"
                          "                   [--weapon <tdbid-u64 | record name, e.g. Items.Preset_Ajax_Default>]\n"
-                         "                   [--shoot-every <seconds, needs --weapon>] [--equip-delay <seconds>]\n");
+                         "                   [--shoot-every <seconds, needs --weapon>] [--equip-delay <seconds>]\n"
+                         "                   [--bleed <percent per second, exercises the health pipeline>]\n"
+                         "                   [--aim-at x,y,z  aim yaw+pitch at a world point instead of oscillating]\n");
             return false;
         }
     }
@@ -245,6 +260,10 @@ int main(const int argc, char** argv)
                                                Behavior(options.pattern, options.center, i, options.boundaryDistance));
         bot->SetWeapon(options.weaponTdbid, options.equipDelay);
         bot->SetBleedRate(options.bleedRate);
+        if (options.hasAimTarget)
+        {
+            bot->SetAimTarget(options.aimTarget);
+        }
         bot->Connect(address);
         bots.push_back(std::move(bot));
     }

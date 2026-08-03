@@ -297,7 +297,19 @@ void BotClient::SendTick(const float dt)
     {
         SendEquip();
     }
-    if (m_weaponTdbid != 0)
+    if (m_hasAimTarget)
+    {
+        // Same yaw convention as the client's AimTargetFor: 0 = +Y, counter-clockwise positive,
+        // so forward = (-sin(yaw), cos(yaw)). Inverting that gives yaw = atan2(-dx, dy).
+        const float dx = m_aimTarget.x - m_lastPose.position.x;
+        const float dy = m_aimTarget.y - m_lastPose.position.y;
+        const float dz = m_aimTarget.z - m_lastPose.position.z;
+        constexpr float RAD2DEG = 57.2957795f;
+        m_lastPose.yaw = std::atan2(-dx, dy) * RAD2DEG;
+        const float horizontal = std::sqrt(dx * dx + dy * dy);
+        m_lastPose.pitch = horizontal > 0.001f ? std::atan2(dz, horizontal) * RAD2DEG : 0.0f;
+    }
+    else if (m_weaponTdbid != 0)
     {
         m_lastPose.pitch = 40.0f * std::sin(m_elapsed);
     }

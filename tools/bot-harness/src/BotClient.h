@@ -93,6 +93,17 @@ public:
         m_bleedRate = percentPerSecond;
     }
 
+    // Damage sync: aim yaw+pitch at a fixed world point instead of the pitch oscillation.
+    // The oscillation exists to make the upper-body LookAt visible in screenshots; for a damage
+    // test it is the opposite of what we want, because a shot at +-40 degrees pitch misses by
+    // construction. Computed per tick from the bot's own position, so it stays correct while the
+    // bot moves.
+    void SetAimTarget(const Vector3 target)
+    {
+        m_aimTarget = target;
+        m_hasAimTarget = true;
+    }
+
     // Weapon sync: TweakDBID of the weapon this bot "draws" after joining (0 = unarmed).
     // equipDelay > 0 postpones the draw by that many seconds after entering Running —
     // isolates mid-spawn equip effects from equip-on-initialized-puppet (2026-07-31).
@@ -153,6 +164,8 @@ private:
     uint64_t m_shotsReceived = 0;
     uint64_t m_healthUpdatesReceived = 0;
     uint64_t m_weaponTdbid = 0;
+    Vector3 m_aimTarget {};
+    bool m_hasAimTarget = false;
     float m_bleedRate = 0.0f;      // percent per second, 0 = don't report health at all
     float m_health = 100.0f;
     float m_healthReportTimer = 0.0f;

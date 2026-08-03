@@ -826,6 +826,20 @@ void NetworkGameSystem::PollIncomingMessages()
                 break;
             }
 
+            // Threat registration reported at Info level, and only when the code changes: this is
+            // the one condition that decides whether the shot goes to the aim point or degrades
+            // into AI_ShootForwards along the weapon's rest orientation, and it has to be
+            // readable in the log file (redscript's own FTLog only reaches the CET console).
+            int32_t threatStatus = -1;
+            Red::CallVirtual(this, "EnsureThreatRegistered", threatStatus, shooter.value());
+            static int32_t s_lastThreatStatus = -99;
+            if (threatStatus != s_lastThreatStatus)
+            {
+                s_lastThreatStatus = threatStatus;
+                SDK->logger->InfoF(PLUGIN, "diag: threat status %d (0=already 1=registered 2=no-tracker 3=no-player 4=not-a-puppet)",
+                                   threatStatus);
+            }
+
             SDK->logger->TraceF(PLUGIN, "diag: entity %llu shot weapon %llu", entity_shoot.networkedEntityId,
                                 entity_shoot.itemIdWeapon);
             const auto& shooterMoveState = m_movementState[shooterEntityId];
