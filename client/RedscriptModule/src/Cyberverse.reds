@@ -253,6 +253,11 @@ protected cb func OnHit(evt: ref<gameHitEvent>) -> Bool {
         }
         tracker.LogDiag(10, Cast<Float>(attitude));
         tracker.LogDiag(11, IsDefined(evt.attackComputed) ? 1.0 : -1.0);
+        // 13 = ist die Attack-Source gesetzt? Eine undefinierte Source laesst
+        // CheckForQuickExit die gesamte Pipeline hart abbrechen
+        // (damageSystem.script:1782-1815) — und sie ist ein anderes Feld als der Instigator,
+        // der nachweislich gesetzt ist.
+        tracker.LogDiag(13, IsDefined(evt.attackData.GetSource()) ? 1.0 : -1.0);
     }
     return result;
 }
