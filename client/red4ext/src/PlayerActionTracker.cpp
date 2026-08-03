@@ -89,6 +89,11 @@ void PlayerActionTracker::OnPlayerHealthChanged(const float healthPercent, const
     Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, health);
 }
 
+void PlayerActionTracker::LogDiag(const int32_t code, const float value)
+{
+    SDK->logger->InfoF(PLUGIN, "diag: reds code=%d value=%.2f", code, value);
+}
+
 void PlayerActionTracker::OnHit(RED4ext::Handle<RED4ext::GameObject> gameObject,
                                 RED4ext::Handle<RED4ext::gameHitEvent> event)
 {

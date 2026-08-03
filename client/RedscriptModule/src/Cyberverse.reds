@@ -217,6 +217,59 @@ protected cb func OnDetach() -> Bool {
     return wrappedMethod();
 }
 
+// DIAGNOSE (choomlink-2hum, 2026-08-03): erreicht ein relayter Schuss den Spieler ueberhaupt?
+//
+// Stand der Messungen: der Schuss ist vollstaendig korrekt aufgesetzt — gueltige Waffe im Slot,
+// attached, eigener Ranged-Attack (shoot status 0), Threat registriert, Pose korrekt, Waffe
+// erhoben und auf den Spieler gerichtet. Trotzdem faellt die Gesundheit nie.
+//
+// Damit ist die Frage binaer geworden: kommt gar kein Treffer an (Geometrie/Kollision), oder
+// kommt einer an und der Schaden wird unterdrueckt? OnHit auf ScriptedPuppet ist der frueheste
+// Punkt in der Vanilla-Kette (gameObject.script:984 -> ProcessDamagePipeline) und feuert
+// unabhaengig davon, ob am Ende Schaden herauskommt. PlayerPuppet erbt ihn.
+//
+// MESSERGEBNIS 2026-08-03: code 10 feuert einmal pro Schuss, im Takt der Schusskadenz. Die
+// Kugel ERREICHT den Spieler — Geometrie und Zielrichtung stimmen. Der Schaden bleibt trotzdem
+// aus. Diese Sonde trennt jetzt die verbliebenen Erklaerungen:
+//
+//   10 = Treffer, value = Attitude zwischen Spieler und Angreifer
+//        (EAIAttitude: 0 = Friendly, 1 = Neutral, 2 = Hostile).
+//        Friendly ist der Verdaechtige: CheckForQuickExit stempelt in dem Fall
+//        hitFlag.DealNoDamage (damageSystem.script:1832). Wir setzen zwar
+//        SetAttitudeGroup(n"neutral"), aber dieser Gruppenname kommt im Vanilla-Dump NIRGENDS
+//        vor — loest die CName nicht auf, bleibt die Judy-eigene, freundliche Gruppe stehen.
+//   11 = value 1 wenn attackComputed an dieser Stelle bereits befuellt ist, sonst -1.
+//        Wichtig, weil OnHit VOR der Berechnung liegt: die 0.00 aus dem ersten Durchlauf
+//        koennte schlicht "noch nicht gerechnet" heissen statt "auf null gerechnet".
+@wrapMethod(ScriptedPuppet)
+protected cb func OnHit(evt: ref<gameHitEvent>) -> Bool {
+    let result = wrappedMethod(evt);
+    if this.IsPlayer() {
+        let tracker = GameInstance.GetNetworkGameSystem().playerActionTracker;
+        let instigator = evt.attackData.GetInstigator();
+        let attitude: Int32 = -1;
+        if IsDefined(instigator) {
+            attitude = EnumInt(GameObject.GetAttitudeBetween(this, instigator));
+        }
+        tracker.LogDiag(10, Cast<Float>(attitude));
+        tracker.LogDiag(11, IsDefined(evt.attackComputed) ? 1.0 : -1.0);
+    }
+    return result;
+}
+
+// Der spaetere Punkt in derselben Kette: OnDamageReceived wird nur gestellt, wenn der
+// Gesamtschaden groesser null ist (damageSystem.script:1309-1314). Feuert code 12 nie, waehrend
+// code 10 im Takt kommt, ist der Schaden nachweislich auf null gerechnet worden — und nicht
+// etwa der Treffer ausgeblieben.
+@wrapMethod(ScriptedPuppet)
+protected cb func OnDamageReceived(evt: ref<gameDamageReceivedEvent>) -> Bool {
+    let result = wrappedMethod(evt);
+    if this.IsPlayer() {
+        GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(12, evt.totalDamageReceived);
+    }
+    return result;
+}
+
 // Fires when the locomotion state machine actually enters the jump state — unlike the Jump
 // button, this never false-positives (menus, blocked jumps).
 @wrapMethod(JumpEvents)

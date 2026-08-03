@@ -31,6 +31,9 @@ public:
     /// deliberately state-driven rather than damage-driven: healing, regeneration and items change
     /// health without any hit ever happening.
     void OnPlayerHealthChanged(float healthPercent, bool isDead);
+    /// Generic diagnostic channel for the redscript side. FTLog only reaches the CET console
+    /// window, never a file, so anything an automated test has to read must come through here.
+    void LogDiag(int32_t code, float value);
 private:
     RTTI_IMPL_TYPEINFO(PlayerActionTracker);
     RTTI_IMPL_ALLOCATOR();
@@ -47,5 +50,6 @@ RTTI_DEFINE_CLASS(PlayerActionTracker, {
     RTTI_METHOD(OnItemEquipped);
     RTTI_METHOD(OnItemUnequipped);
     RTTI_METHOD(OnPlayerHealthChanged);
+    RTTI_METHOD(LogDiag);
     RTTI_ALIAS("Cyberverse.Network.Managers.PlayerActionTracker");
 });

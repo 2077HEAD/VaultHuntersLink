@@ -331,16 +331,27 @@ public native class NetworkGameSystem extends IGameSystem {
     // spread and muzzle effects are engine-owned from there.
     // timeStamp mirrors the AI caller's duration param; 0.0 = fire now. If nothing shows
     // in-game, second attempt: EngineTime.ToFloat(GameInstance.GetSimTime(...)).
-    public func ApplyShootOnPuppet(entity: ref<Entity>, yaw: Float, pitch: Float, charge: Float) {
+    // Returns a status code that the C++ caller logs (FTLog never reaches a file). The point is
+    // to tell apart the remaining candidates for "shot fires but does no damage" without guessing:
+    //   0 = fired, weapon carried its own ranged attack
+    //   1 = fired, ranged attack derived from the weapon record as a fallback
+    //   2 = fired WITHOUT any ranged attack -> the projectile carries no damage payload
+    //   3 = no weapon in the slot   4 = not a puppet   5 = weapon not attached
+    public func ApplyShootOnPuppet(entity: ref<Entity>, yaw: Float, pitch: Float, charge: Float) -> Int32 {
         let puppet = entity as ScriptedPuppet;
         if !IsDefined(puppet) {
-            return;
+            return 4;
         }
         let ts = GameInstance.GetTransactionSystem(puppet.GetGame());
         let weapon = ts.GetItemInSlot(puppet, t"AttachmentSlots.WeaponRight") as WeaponObject;
         if !IsDefined(weapon) {
             // Shot for an unarmed puppet (packet race with equip): drop, never crash (spec §5).
-            return;
+            return 3;
+        }
+        // AIWeapon.Fire bails out silently on an unattached weapon (weapon.script:1491) — worth
+        // distinguishing, because "equipped" and "attached" are not the same thing.
+        if !weapon.IsAttached() {
+            return 5;
         }
         let target = this.AimTargetFor(puppet, yaw, pitch, 50.0);
 
@@ -370,16 +381,19 @@ public native class NetworkGameSystem extends IGameSystem {
         // GetCurrentRangedAttack().DefaultFire(); the static equivalent that does not depend on
         // any AI having touched the weapon is WeaponItem_Record.RangedAttacks().DefaultFire().
         let rangedAttack: TweakDBID;
+        let status: Int32 = 0;
         if !IsDefined(weapon.GetCurrentRangedAttack()) {
+            status = 2; // bis der Rückfall greift
             let weaponRecord = TweakDBInterface.GetWeaponItemRecord(ItemID.GetTDBID(weapon.GetItemID()));
             if IsDefined(weaponRecord) && IsDefined(weaponRecord.RangedAttacks())
                 && IsDefined(weaponRecord.RangedAttacks().DefaultFire()) {
                 rangedAttack = weaponRecord.RangedAttacks().DefaultFire().GetID();
+                status = 1;
             }
         }
 
         AIWeapon.Fire(puppet, weapon, 0.0, 1.0, gamedataTriggerMode.SemiAuto, target, null, rangedAttack);
-        FTLog(s"[ChoomLink] remote shot for puppet \(EntityID.GetHash(puppet.GetEntityID()))");
+        return status;
     }
 
     // Puts the puppet into a combat/aiming animation state, or back to relaxed.

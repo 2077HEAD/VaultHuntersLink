@@ -869,8 +869,18 @@ void NetworkGameSystem::PollIncomingMessages()
             SDK->logger->TraceF(PLUGIN, "diag: entity %llu shot weapon %llu", entity_shoot.networkedEntityId,
                                 entity_shoot.itemIdWeapon);
             const auto& shooterMoveState = m_movementState[shooterEntityId];
-            Red::CallVirtual(this, "ApplyShootOnPuppet", shooter.value(), shooterMoveState.targetYaw,
+            int32_t shootStatus = -1;
+            Red::CallVirtual(this, "ApplyShootOnPuppet", shootStatus, shooter.value(), shooterMoveState.targetYaw,
                              shooterMoveState.targetPitch, entity_shoot.charge);
+            static int32_t s_lastShootStatus = -99;
+            if (shootStatus != s_lastShootStatus)
+            {
+                s_lastShootStatus = shootStatus;
+                SDK->logger->InfoF(PLUGIN,
+                                   "diag: shoot status %d (0=own-attack 1=fallback-attack "
+                                   "2=NO-attack 3=no-weapon 4=not-a-puppet 5=weapon-not-attached)",
+                                   shootStatus);
+            }
         }
         break;
 

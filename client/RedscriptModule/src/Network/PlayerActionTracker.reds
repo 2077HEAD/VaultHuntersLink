@@ -10,5 +10,6 @@ public native class PlayerActionTracker {
     public native func OnItemEquipped(slot: TweakDBID, item: ItemID, isWeapon: Bool);
     public native func OnItemUnequipped(slot: TweakDBID, item: ItemID, isWeapon: Bool);
     public native func OnPlayerHealthChanged(healthPercent: Float, isDead: Bool) -> Void;
+    public native func LogDiag(code: Int32, value: Float) -> Void;
     public native func TrackJump() -> Void;
 }
