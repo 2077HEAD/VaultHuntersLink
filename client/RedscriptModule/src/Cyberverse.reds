@@ -190,6 +190,29 @@ public class ChoomLinkPlayerHealthListener extends ScriptStatPoolsListener {
     }
 
     public func OnStatPoolValueChanged(oldValue: Float, newValue: Float, percToPoints: Float) -> Void {
+        // Respawn statt Todesmenue (choomlink-2hum). Ohne das endet ein Tod im
+        // Einzelspieler-Bildschirm "FLATLINED / LOAD LAST CHECKPOINT" — in-game belegt
+        // 2026-08-03 — und wirft den Spieler damit aus der Sitzung.
+        //
+        // Der engine-native Weg ist die Wiederbelebung des Spiels selbst: liegt
+        // BaseStatusEffect.SecondHeart an, laesst SetIsResurrectionAllowedBasedOnState die
+        // Wiederbelebung zu und setzt das Todesmenue-Blackboard gar nicht erst
+        // (highLevelTransitions.script:169-187). Die Zustandsmaschine geht dann durch
+        // ResurrectEvents, und PlayerPuppet.OnResurrected ist bereits mehrspielerbewusst — es
+        // belebt bei IsMultiplayer mit 20 % statt 100 % wieder (player.script:5177-5190).
+        //
+        // Der Effekt muss VOR dem Tod anliegen, weil die Pruefung in DeathEvents.OnEnter
+        // laeuft. Deshalb hier an einer Schwelle statt beim Tod selbst.
+        //
+        // DESIGNENTSCHEIDUNG, bewusst minimal gehalten: Wiederbelebung an Ort und Stelle.
+        // Ein Spawnpunkt-System gibt es im Spiel nicht (recherchiert), das waere ein eigenes
+        // Vorhaben — ebenso die Frage, ob ein Respawn Verzoegerung oder Kosten haben soll.
+        if newValue <= 15.0 && newValue > 0.0 && IsDefined(this.m_player) {
+            if !StatusEffectSystem.ObjectHasStatusEffect(this.m_player, t"BaseStatusEffect.SecondHeart") {
+                StatusEffectHelper.ApplyStatusEffect(this.m_player, t"BaseStatusEffect.SecondHeart");
+            }
+        }
+
         if this.m_hasReported && AbsF(newValue - this.m_lastReported) < 0.5 && newValue > 0.0 {
             return;
         }
