@@ -9,4 +9,5 @@ public enum EMessageTypeClientbound: ushort
     EquipItemEntity = 4,
     EntityAction = 5,
     EntityShoot = 6,
+    EntityHealth = 7,
 }

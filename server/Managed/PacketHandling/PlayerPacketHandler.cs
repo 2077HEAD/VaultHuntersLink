@@ -22,6 +22,7 @@ public class PlayerPacketHandler
     private readonly TypedPacketHandler<PlayerEquipItem> _playerEquipHandler;
     private readonly TypedPacketHandler<PlayerShoot> _playerShootHandler;
     private readonly TypedPacketHandler<PlayerActionTracked> _playerActionHandler;
+    private readonly TypedPacketHandler<PlayerHealthUpdate> _playerHealthHandler;
     private EntityTracker? _tracker = null;
     private PlayerService? _players = null;
 
@@ -34,6 +35,7 @@ public class PlayerPacketHandler
         _playerEquipHandler = new TypedPacketHandler<PlayerEquipItem>(HandleEquip);
         _playerShootHandler = new TypedPacketHandler<PlayerShoot>(HandleShoot);
         _playerActionHandler = new TypedPacketHandler<PlayerActionTracked>(HandleActionTracked);
+        _playerHealthHandler = new TypedPacketHandler<PlayerHealthUpdate>(HandleHealthUpdate);
     }
 
     protected void HandleJoinWorld(GameServer server, EMessageTypeServerbound messageType, byte channelId, uint connectionId, PlayerJoinWorld content)
@@ -224,6 +226,42 @@ public class PlayerPacketHandler
         }
     }
 
+    private void HandleHealthUpdate(GameServer server, EMessageTypeServerbound messageType, byte channelId,
+        uint connectionId, PlayerHealthUpdate content)
+    {
+        if (!_players!.ConnectedPlayers.TryGetValue(connectionId, out var player) || player.PuppetEntity == null)
+        {
+            Logger.Warn($"PlayerHealthUpdate from connection {connectionId} without a puppet, dropping");
+            return;
+        }
+
+        var puppet = player.PuppetEntity;
+
+        // Clamp rather than trust: the wire value comes from a client, and a nonsensical percentage
+        // would otherwise propagate to every other client's stat-pool write. This is not anti-cheat
+        // (a client can still under-report damage, design §1c) -- it just keeps one bad packet from
+        // corrupting everyone else's view.
+        var health = Math.Clamp(content.healthPercent, 0.0f, 100.0f);
+
+        // No dedupe on equal values: unlike a position update this is rare, and swallowing a repeat
+        // would cost us the one packet that re-synchronises a client whose view drifted.
+        puppet.HealthPercent = health;
+        puppet.IsDead = content.isDead;
+
+        Logger.Info($"Health {player.Name}: {health:F1}% dead={content.isDead}");
+
+        var update = new EntityHealth
+        {
+            NetworkedEntityId = puppet.NetworkedEntityId,
+            HealthPercent = health,
+            IsDead = content.isDead
+        };
+        foreach (var trackingConnectionId in _tracker!.GetPlayersTracking(puppet.NetworkedEntityId))
+        {
+            server.EnqueueMessage(EMessageTypeClientbound.EntityHealth, trackingConnectionId, channelId, update);
+        }
+    }
+
     private void HandleActionTracked(GameServer server, EMessageTypeServerbound messageType, byte channelId,
         uint connectionId, PlayerActionTracked content)
     {
@@ -265,5 +303,6 @@ public class PlayerPacketHandler
         server.AddPacketHandler(EMessageTypeServerbound.PlayerEquipItem, _playerEquipHandler.HandlePacket);
         server.AddPacketHandler(EMessageTypeServerbound.PlayerShoot, _playerShootHandler.HandlePacket);
         server.AddPacketHandler(EMessageTypeServerbound.PlayerActionTracked, _playerActionHandler.HandlePacket);
+        server.AddPacketHandler(EMessageTypeServerbound.PlayerHealthUpdate, _playerHealthHandler.HandlePacket);
     }
 }

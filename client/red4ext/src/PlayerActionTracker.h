@@ -27,6 +27,10 @@ public:
     void OnUnmounting(RED4ext::Handle<RED4ext::game::mounting::UnmountingEvent> event);
     void OnItemEquipped(RED4ext::TweakDBID slot, RED4ext::ItemID item, bool isWeapon);
     void OnItemUnequipped(RED4ext::TweakDBID slot, RED4ext::ItemID item, bool isWeapon);
+    /// Called from the local player's Health stat-pool listener (choomlink-2hum). Percent, and
+    /// deliberately state-driven rather than damage-driven: healing, regeneration and items change
+    /// health without any hit ever happening.
+    void OnPlayerHealthChanged(float healthPercent, bool isDead);
 private:
     RTTI_IMPL_TYPEINFO(PlayerActionTracker);
     RTTI_IMPL_ALLOCATOR();
@@ -42,5 +46,6 @@ RTTI_DEFINE_CLASS(PlayerActionTracker, {
     RTTI_METHOD(OnUnmounting);
     RTTI_METHOD(OnItemEquipped);
     RTTI_METHOD(OnItemUnequipped);
+    RTTI_METHOD(OnPlayerHealthChanged);
     RTTI_ALIAS("Cyberverse.Network.Managers.PlayerActionTracker");
 });

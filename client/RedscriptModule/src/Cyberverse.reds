@@ -164,6 +164,56 @@ protected cb func OnShootTarget(eventData: ref<gameprojectileShootTargetEvent>) 
 //     GameInstance.GetNetworkGameSystem().playerActionTracker.OnHit(this, evt);
 // }
 
+// Health reporting (choomlink-2hum). Hooked to the stat pool itself, not to a damage event:
+// health also changes through healing, regeneration, inhalers, fall damage and quest scripts, and
+// "health agrees on both clients" has to hold for all of those, not just for gunfights. There is
+// no HealthChangeEvent in the game — this listener class is the mechanism (vanilla
+// entityHealthBar.script:40-46 registers it exactly like this).
+public class ChoomLinkPlayerHealthListener extends ScriptStatPoolsListener {
+    private let m_player: wref<PlayerPuppet>;
+    // Rate limit: the pool ticks continuously during regeneration, and every tick would otherwise
+    // become a packet. Half a percent is below what any observer can see on a health bar.
+    private let m_lastReported: Float = -1.0;
+
+    public func SetPlayer(player: ref<PlayerPuppet>) -> Void {
+        this.m_player = player;
+    }
+
+    public func OnStatPoolValueChanged(oldValue: Float, newValue: Float, percToPoints: Float) -> Void {
+        if this.m_lastReported >= 0.0 && AbsF(newValue - this.m_lastReported) < 0.5 && newValue > 0.0 {
+            return;
+        }
+        this.m_lastReported = newValue;
+        let isDead = newValue <= 0.0;
+        GameInstance.GetNetworkGameSystem().playerActionTracker.OnPlayerHealthChanged(newValue, isDead);
+    }
+}
+
+@addField(PlayerPuppet)
+let choomlink_healthListener: ref<ChoomLinkPlayerHealthListener>;
+
+@wrapMethod(PlayerPuppet)
+protected cb func OnGameAttached() -> Bool {
+    let result = wrappedMethod();
+    let listener = new ChoomLinkPlayerHealthListener();
+    listener.SetPlayer(this);
+    this.choomlink_healthListener = listener;
+    GameInstance.GetStatPoolsSystem(this.GetGame())
+        .RequestRegisteringListener(Cast<StatsObjectID>(this.GetEntityID()), gamedataStatPoolType.Health, listener);
+    return result;
+}
+
+@wrapMethod(PlayerPuppet)
+protected cb func OnDetach() -> Bool {
+    if IsDefined(this.choomlink_healthListener) {
+        GameInstance.GetStatPoolsSystem(this.GetGame())
+            .RequestUnregisteringListener(Cast<StatsObjectID>(this.GetEntityID()), gamedataStatPoolType.Health,
+                                          this.choomlink_healthListener);
+        this.choomlink_healthListener = null;
+    }
+    return wrappedMethod();
+}
+
 // Fires when the locomotion state machine actually enters the jump state — unlike the Jump
 // button, this never false-positives (menus, blocked jumps).
 @wrapMethod(JumpEvents)

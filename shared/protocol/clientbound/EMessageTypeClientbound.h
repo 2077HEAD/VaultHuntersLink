@@ -10,4 +10,5 @@ enum EMessageTypeClientbound: uint16_t {
     eEquipItemEntity = 4,
     eEntityAction = 5,
     eEntityShoot = 6,
+    eEntityHealth = 7,
 };

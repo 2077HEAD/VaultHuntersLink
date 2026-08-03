@@ -9,5 +9,6 @@ public native class PlayerActionTracker {
     public native func OnUnmounting(evt: ref<UnmountingEvent>);
     public native func OnItemEquipped(slot: TweakDBID, item: ItemID, isWeapon: Bool);
     public native func OnItemUnequipped(slot: TweakDBID, item: ItemID, isWeapon: Bool);
+    public native func OnPlayerHealthChanged(healthPercent: Float, isDead: Bool) -> Void;
     public native func TrackJump() -> Void;
 }

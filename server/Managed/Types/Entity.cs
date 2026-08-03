@@ -25,6 +25,11 @@ public class Entity
     // 0/0 = nothing drawn. Slot/item are raw TweakDBID values as sent by the client.
     public ulong DrawnWeaponSlot;
     public ulong DrawnWeaponItemId;
+    // Health as server-held state (damage/health sync design §1c). Percent, because a remote
+    // puppet's maximum hit points differ from the owning player's. Starts at full: a player who
+    // has never reported health is alive and undamaged, which is the correct assumption on join.
+    public float HealthPercent = 100.0f;
+    public bool IsDead;
 
     public Entity(ulong entityId, ulong recordId)
     {

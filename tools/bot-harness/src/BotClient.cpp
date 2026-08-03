@@ -261,6 +261,21 @@ void BotClient::HandleMessage(const void* data, const size_t size)
     }
     break;
 
+    case eEntityHealth:
+    {
+        EntityHealth health = {};
+        if (zpp::bits::failure(in(health)))
+        {
+            std::fprintf(stderr, "[%s] faulty packet: EntityHealth\n", m_name.c_str());
+            return;
+        }
+        m_healthUpdatesReceived++;
+        std::printf("[%s] peer health: entity %llu %.1f%% dead=%d\n", m_name.c_str(),
+                    static_cast<unsigned long long>(health.networkedEntityId), health.healthPercent,
+                    health.isDead ? 1 : 0);
+    }
+    break;
+
     default:
         break;
     }
@@ -289,6 +304,26 @@ void BotClient::SendTick(const float dt)
 
     const PlayerPositionUpdate update = { m_lastPose.position, m_lastPose.yaw, m_lastPose.pitch };
     Send(update);
+
+    if (m_bleedRate > 0.0f)
+    {
+        m_health -= m_bleedRate * dt;
+        if (m_health <= 0.0f)
+        {
+            m_health = 100.0f; // wrap rather than stay dead, so a long run keeps exercising the path
+        }
+        // Reported at 2 Hz regardless of the tick rate: health is state, and the real client
+        // rate-limits it too (0.5 percent threshold in the redscript listener).
+        m_healthReportTimer += dt;
+        if (m_healthReportTimer >= 0.5f)
+        {
+            m_healthReportTimer = 0.0f;
+            PlayerHealthUpdate health = {};
+            health.healthPercent = m_health;
+            health.isDead = false;
+            Send(health);
+        }
+    }
 }
 
 void BotClient::SendJump()

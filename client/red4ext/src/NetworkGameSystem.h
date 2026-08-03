@@ -73,10 +73,15 @@ private:
     // networkedEntityId; the teleport path flushes them once the entity resolves.
     std::map<uint64_t, EquipItemEntity> m_pendingEquips;
 
+    // Health snapshots hit the exact same spawn race as the equip snapshot above -- both are sent
+    // from OnStartTrackingEntity right behind SpawnEntity. Same buffer, same flush point.
+    std::map<uint64_t, EntityHealth> m_pendingHealth;
+
     // Applies one EquipItemEntity to a resolved puppet: redscript TransactionSystem apply +
     // the movement-state bookkeeping (weaponDrawn, aim LookAt teardown on unequip).
     void ApplyEquipPacket(const Red::Handle<Red::Entity>& entity, RED4ext::ent::EntityID entityId,
                           const EquipItemEntity& equip);
+    void ApplyHealthPacket(const Red::Handle<Red::Entity>& entity, const EntityHealth& health);
     std::map<RED4ext::ent::EntityID, RED4ext::Handle<RED4ext::AICommand>> m_LastTeleportCommand;
     float m_TimeSinceLastPlayerPositionSync;
 
@@ -136,5 +141,6 @@ template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerSpawnC
 template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerUnmountCar msg);
 template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerEquipItem msg);
 template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerShoot msg);
+template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerHealthUpdate msg);
 
 #endif //NETWORKMANAGERCONTROLLER_H

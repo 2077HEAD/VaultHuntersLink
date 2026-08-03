@@ -435,6 +435,9 @@ void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& enti
         // Weapon sync: make the puppet a valid target (attitude neutral, not Judy-friendly) —
         // same one-shot setup point as the animset inputs.
         Red::CallVirtual(this, "SetupPuppetAttitude", entity);
+        // Damage sync: switch off the defeat mechanic, otherwise the puppet's health floors at 10%
+        // and a dead player would stay standing on every observer's screen (choomlink-2hum).
+        Red::CallVirtual(this, "SetupPuppetMortality", entity);
         SDK->logger->InfoF(PLUGIN, "diag: combat-locomotion animset inputs set on entity");
     }
 
@@ -636,6 +639,13 @@ void NetworkGameSystem::PollIncomingMessages()
                     ApplyEquipPacket(entity.value(), entityId, pendingEquip->second);
                     m_pendingEquips.erase(pendingEquip);
                 }
+
+                if (const auto pendingHealth = m_pendingHealth.find(teleport.networkedEntityId);
+                    pendingHealth != m_pendingHealth.end())
+                {
+                    ApplyHealthPacket(entity.value(), pendingHealth->second);
+                    m_pendingHealth.erase(pendingHealth);
+                }
             }
 
             if (positionSource.X == 0.0 && positionSource.Y == 0.0 && positionSource.Z == 0.0)
@@ -824,6 +834,37 @@ void NetworkGameSystem::PollIncomingMessages()
         }
         break;
 
+        case eEntityHealth:
+        {
+            EntityHealth entity_health = {};
+            if (zpp::bits::failure(in(entity_health)))
+            {
+                SDK->logger->Error(PLUGIN, "Faulty packet: EntityHealth");
+                pIncomingMsg->Release();
+                continue;
+            }
+
+            const auto knownHealthEntity = m_networkedEntitiesLookup.find(entity_health.networkedEntityId);
+            std::optional<Red::Handle<Red::Entity>> healthEntity;
+            if (knownHealthEntity != m_networkedEntitiesLookup.end())
+            {
+                healthEntity = Cyberverse::Utils::GetDynamicEntity(knownHealthEntity->second);
+            }
+
+            if (!healthEntity.has_value())
+            {
+                // Track-start snapshot beating the async spawn, exactly like the equip case.
+                // Buffering rather than dropping matters more here than for equipment: a dropped
+                // health snapshot leaves the puppet at its NPC record's health, which looks
+                // plausible and is simply wrong -- a silent failure, not a visible one.
+                m_pendingHealth[entity_health.networkedEntityId] = entity_health;
+                break;
+            }
+
+            ApplyHealthPacket(healthEntity.value(), entity_health);
+        }
+        break;
+
         case eDestroyEntity:
         {
             DestroyEntity destroy_entity = {};
@@ -848,6 +889,11 @@ void NetworkGameSystem::PollIncomingMessages()
 
             m_movementState.erase(entityId);
             m_networkedEntitiesLookup.erase(entityId);
+            // Drop any state that was still waiting for this entity to resolve. Without this the
+            // buffers grow for the session, and worse: a networkedEntityId reused for a later
+            // entity would inherit the previous occupant's equip/health.
+            m_pendingEquips.erase(destroy_entity.networkedEntityId);
+            m_pendingHealth.erase(destroy_entity.networkedEntityId);
         }
         break;
 
@@ -902,6 +948,13 @@ void NetworkGameSystem::ApplyEquipPacket(const Red::Handle<Red::Entity>& entity,
         moveState.lastAimYaw = 999.0f;
         moveState.lastAimPitch = 999.0f;
     }
+}
+
+void NetworkGameSystem::ApplyHealthPacket(const Red::Handle<Red::Entity>& entity, const EntityHealth& health)
+{
+    SDK->logger->TraceF(PLUGIN, "diag: entity %llu health %.1f%% dead=%d", health.networkedEntityId,
+                        health.healthPercent, health.isDead ? 1 : 0);
+    Red::CallVirtual(this, "ApplyHealthOnPuppet", entity, health.healthPercent, health.isDead);
 }
 
 void NetworkGameSystem::TrackPlayerPosition(float deltaTime)

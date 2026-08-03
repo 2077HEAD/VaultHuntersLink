@@ -78,6 +78,17 @@ void PlayerActionTracker::OnPlayerShoot(const RED4ext::ItemID item, const RED4ex
     Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, player_shoot);
 }
 
+void PlayerActionTracker::OnPlayerHealthChanged(const float healthPercent, const bool isDead)
+{
+    // Rate limiting lives on the redscript side (a change threshold), not here: this native is the
+    // dumb transport end, and the listener already fires only on actual changes.
+    PlayerHealthUpdate health = {};
+    health.healthPercent = healthPercent;
+    health.isDead = isDead;
+    SDK->logger->InfoF(PLUGIN, "diag: local health %.1f%% dead=%d", healthPercent, isDead ? 1 : 0);
+    Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, health);
+}
+
 void PlayerActionTracker::OnHit(RED4ext::Handle<RED4ext::GameObject> gameObject,
                                 RED4ext::Handle<RED4ext::gameHitEvent> event)
 {

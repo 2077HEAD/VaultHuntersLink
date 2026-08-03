@@ -83,6 +83,21 @@ struct PlayerEquipItem {
     }
 };
 
+// The player's own health, reported by the client that owns it (damage/health sync design §1c).
+// Percent, not points: the victim's client runs the real damage pipeline with the victim's real
+// stats, and a remote puppet's maximum hit points differ from the player's anyway -- an absolute
+// value would be meaningless at the other end.
+struct PlayerHealthUpdate {
+    float healthPercent; // 0..100
+    bool isDead;
+
+    inline static void FillMessageFrame(MessageFrame& frame)
+    {
+        frame.message_type = ePlayerHealthUpdate;
+        frame.channel_id = 0; // state, like PlayerEquipItem
+    }
+};
+
 struct PlayerShoot {
     // TODO: This should be the weaponId perspectively, not the TweakDBID
     uint64_t itemIdWeapon;

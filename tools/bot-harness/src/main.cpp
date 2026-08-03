@@ -38,6 +38,7 @@ struct Options
     uint64_t weaponTdbid = 0; // weapon each bot draws after joining; 0 = unarmed
     float shootEvery = 0.0f;  // seconds between PlayerShoot per bot; 0 = never (needs --weapon)
     float equipDelay = 0.0f;  // seconds after join before drawing the weapon; 0 = immediately
+    float bleedRate = 0.0f;   // percent health lost per second; 0 = don't report health at all
 };
 
 bool ParseArgs(const int argc, char** argv, Options& options)
@@ -155,6 +156,12 @@ bool ParseArgs(const int argc, char** argv, Options& options)
             if (!value) return false;
             options.shootEvery = static_cast<float>(std::atof(value));
         }
+        else if (arg == "--bleed")
+        {
+            const auto value = next();
+            if (!value) return false;
+            options.bleedRate = static_cast<float>(std::atof(value));
+        }
         else if (arg == "--equip-delay")
         {
             const auto value = next();
@@ -237,6 +244,7 @@ int main(const int argc, char** argv)
         auto bot = std::make_unique<BotClient>(i, iface,
                                                Behavior(options.pattern, options.center, i, options.boundaryDistance));
         bot->SetWeapon(options.weaponTdbid, options.equipDelay);
+        bot->SetBleedRate(options.bleedRate);
         bot->Connect(address);
         bots.push_back(std::move(bot));
     }
@@ -302,7 +310,7 @@ int main(const int argc, char** argv)
             statsAccumulator = 0.0f;
 
             int running = 0, dead = 0;
-            uint64_t teleports = 0, actions = 0, spawns = 0, despawns = 0, equips = 0, shots = 0;
+            uint64_t teleports = 0, actions = 0, spawns = 0, despawns = 0, equips = 0, shots = 0, healths = 0;
             for (const auto& bot : bots)
             {
                 if (bot->GetState() == BotClient::State::Running) running++;
@@ -313,12 +321,13 @@ int main(const int argc, char** argv)
                 despawns += bot->ConsumeDespawnCount();
                 equips += bot->ConsumeEquipCount();
                 shots += bot->ConsumeShotCount();
+                healths += bot->ConsumeHealthCount();
             }
-            std::printf("stats: %d/%zu running, %d dead, %llu teleports, %llu actions, %llu spawns, %llu despawns, %llu equips, %llu shots received/s\n",
+            std::printf("stats: %d/%zu running, %d dead, %llu teleports, %llu actions, %llu spawns, %llu despawns, %llu equips, %llu shots, %llu health received/s\n",
                         running, bots.size(), dead, static_cast<unsigned long long>(teleports),
                         static_cast<unsigned long long>(actions), static_cast<unsigned long long>(spawns),
                         static_cast<unsigned long long>(despawns), static_cast<unsigned long long>(equips),
-                        static_cast<unsigned long long>(shots));
+                        static_cast<unsigned long long>(shots), static_cast<unsigned long long>(healths));
 
             if (dead == static_cast<int>(bots.size()))
             {

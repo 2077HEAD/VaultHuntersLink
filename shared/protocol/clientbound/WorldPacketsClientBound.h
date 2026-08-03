@@ -71,6 +71,22 @@ struct EquipItemEntity {
     }
 };
 
+// A player's health, as held by the server and pushed to everyone tracking that player's puppet.
+// Sent both on change and as a snapshot when a viewer starts tracking the entity -- health is
+// state, not an event log, so a late joiner needs the current value and not the hit history
+// (same reasoning as EquipItemEntity).
+struct EntityHealth {
+    uint64_t networkedEntityId;
+    float healthPercent; // 0..100
+    bool isDead;
+
+    inline static void FillMessageFrame(MessageFrame& frame)
+    {
+        frame.message_type = eEntityHealth;
+        frame.channel_id = 0;
+    }
+};
+
 // Relays a serverbound PlayerShoot to the clients tracking the shooter's puppet.
 struct EntityShoot {
     uint64_t networkedEntityId;

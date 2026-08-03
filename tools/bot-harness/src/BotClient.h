@@ -78,6 +78,20 @@ public:
         m_shotsReceived = 0;
         return count;
     }
+    uint64_t ConsumeHealthCount()
+    {
+        const auto count = m_healthUpdatesReceived;
+        m_healthUpdatesReceived = 0;
+        return count;
+    }
+
+    // Damage sync: bots "bleed" from full to empty and back, purely to exercise the health
+    // pipeline (report -> server state -> relay -> track-start snapshot) without a running game.
+    // 0 disables it, which is the default.
+    void SetBleedRate(const float percentPerSecond)
+    {
+        m_bleedRate = percentPerSecond;
+    }
 
     // Weapon sync: TweakDBID of the weapon this bot "draws" after joining (0 = unarmed).
     // equipDelay > 0 postpones the draw by that many seconds after entering Running —
@@ -137,7 +151,11 @@ private:
     uint64_t m_despawnsReceived = 0;
     uint64_t m_equipsReceived = 0;
     uint64_t m_shotsReceived = 0;
+    uint64_t m_healthUpdatesReceived = 0;
     uint64_t m_weaponTdbid = 0;
+    float m_bleedRate = 0.0f;      // percent per second, 0 = don't report health at all
+    float m_health = 100.0f;
+    float m_healthReportTimer = 0.0f;
     float m_equipDelay = 0.0f;   // seconds after Running before the equip is sent
     bool m_equipSent = false;
     float m_elapsed = 0.0f; // running time, drives the armed-bot aim-pitch oscillation

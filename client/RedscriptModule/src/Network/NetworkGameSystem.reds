@@ -241,6 +241,45 @@ public native class NetworkGameSystem extends IGameSystem {
         FTLog(s"[ChoomLink] remote equip \(TDBID.ToStringDEBUG(item)) into \(TDBID.ToStringDEBUG(slot))");
     }
 
+    // Applies a remote player's health to their puppet (choomlink-2hum). Health is not a field:
+    // it lives in the native StatPoolsSystem, keyed by a StatsObjectID cast of the EntityID
+    // (vanilla player.script:5354-5358 Revive uses exactly this call).
+    //
+    // `perc` is passed explicitly on purpose. The flag decides the unit and the default is not
+    // consistent across the vanilla call sites — omitting it is how you silently write 40 hit
+    // points where you meant 40 percent.
+    public func ApplyHealthOnPuppet(entity: ref<Entity>, healthPercent: Float, isDead: Bool) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        let statsId = Cast<StatsObjectID>(puppet.GetEntityID());
+        let pools = GameInstance.GetStatPoolsSystem(puppet.GetGame());
+
+        if isDead {
+            // Kill() is the canonical forced death (scriptedPuppet.script:1761-1770); it also runs
+            // the death animation and ragdoll, which a bare stat-pool write to 0 would not.
+            if !puppet.IsDead() {
+                puppet.Kill(null, false, false);
+            }
+            return;
+        }
+
+        pools.RequestSettingStatPoolValue(statsId, gamedataStatPoolType.Health, healthPercent, null, true);
+    }
+
+    // Remote puppets must be able to actually die rather than drop to the "defeated" state.
+    // NPCs with the defeat mechanic active carry a health custom limit of 10% instead of 0%
+    // (NPCPuppet.script:687-696), so their health can never reach zero. For a player-controlled
+    // puppet that would mean a killed player stays standing at 10% on every observer's screen.
+    public func SetupPuppetMortality(entity: ref<Entity>) {
+        let npc = entity as NPCPuppet;
+        if !IsDefined(npc) {
+            return;
+        }
+        npc.SetIsDefeatMechanicActive(false, false);
+    }
+
     // Aim target from the relayed yaw/pitch: eye-height point `dist` meters along the aim
     // direction. Yaw convention: 0 = +Y, CCW positive -> forward = (-sin, cos). VERIFY the
     // sign in-game (Task 8) — if the torso turns mirrored, flip the X sign here.

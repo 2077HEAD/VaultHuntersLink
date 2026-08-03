@@ -234,6 +234,18 @@ public class EntityTracker
             };
             _sink.EnqueueMessage(EMessageTypeClientbound.EquipItemEntity, player.ConnectionId, 1, equipSnapshot);
         }
+
+        // Same reasoning for health (damage/health sync design §1c). Sent unconditionally rather
+        // than only when damaged: the puppet spawns at whatever health its NPC record gives it,
+        // which is not the owning player's, so "no packet" would leave a wrong value rather than
+        // a merely stale one.
+        var healthSnapshot = new EntityHealth
+        {
+            NetworkedEntityId = entity.NetworkedEntityId,
+            HealthPercent = entity.HealthPercent,
+            IsDead = entity.IsDead
+        };
+        _sink.EnqueueMessage(EMessageTypeClientbound.EntityHealth, player.ConnectionId, 0, healthSnapshot);
     }
 
     public void OnStopTrackingEntity(Player player, Entity entity)
