@@ -1,0 +1,76 @@
+ChoomLink @VERSION@
+====================
+
+Kurzfassung fuer Ungeduldige. Die ausfuehrliche Anleitung mit Bildern und
+Fehlerbehebung steht in docs/INSTALL.md im Repository.
+
+
+WAS DU VORHER BRAUCHST
+----------------------
+
+Cyberpunk 2077 in Version 2.31. ChoomLink ist auf genau diese Spielversion
+festgenagelt -- eine neuere Version verbindet sich nicht.
+
+Dazu drei Mod-Grundlagen, jeweils genauso "entpacken in den Spielordner":
+
+  1. RED4ext        https://github.com/WopsS/RED4ext/releases
+  2. redscript      https://github.com/jac3km4/redscript/releases
+  3. Codeware       https://github.com/psiberx/cp2077-codeware/releases
+
+Ohne diese drei startet ChoomLink nicht.
+
+
+INSTALLATION
+------------
+
+Den Inhalt dieses Zips in den Cyberpunk-2077-Ordner entpacken -- also dorthin,
+wo schon "bin", "r6" und "archive" liegen. Bei Steam ist das normalerweise:
+
+  C:\Program Files (x86)\Steam\steamapps\common\Cyberpunk 2077
+
+Danach liegen dort zusaetzlich:
+
+  ChoomLink starten.bat
+  choomlink-server.txt
+  red4ext\plugins\Cyberverse\
+  r6\scripts\Cyberverse\
+  archive\pc\mod\choomlink_puppet.archive
+
+
+SERVER EINTRAGEN
+----------------
+
+"choomlink-server.txt" mit dem Editor oeffnen und die Adresse eintragen, die du
+bekommen hast. Wenn der Server ueber Tailscale laeuft, ist das die Tailscale-IP
+(z. B. 100.x.y.z) -- dafuer muss Tailscale bei dir installiert und im selben
+Netz angemeldet sein.
+
+
+SPIELEN
+-------
+
+"ChoomLink starten.bat" doppelklicken. NICHT ueber Steam starten: Steam
+verschluckt die Verbindungsargumente, dann landest du im normalen Einzelspieler.
+
+Das Spiel laedt automatisch deinen letzten Spielstand und verbindet sich.
+
+
+WENN ETWAS NICHT GEHT
+---------------------
+
+Das Spiel startet und du bist allein / niemand ist zu sehen:
+  Wurde ueber Steam gestartet, oder die Adresse in choomlink-server.txt stimmt
+  nicht, oder der Server laeuft nicht.
+
+Das Spiel stuerzt beim Laden ab:
+  Meistens fehlt Codeware oder redscript. In
+  "r6\logs\redscript_rCURRENT.log" steht, was nicht aufgeloest werden konnte.
+
+Es passiert gar nichts / kein ChoomLink im Log:
+  In "red4ext\logs\red4ext.log" nachsehen, ob die Zeile mit "Cyberverse"
+  auftaucht. Fehlt sie, liegt der Ordner "red4ext\plugins\Cyberverse" nicht an
+  der richtigen Stelle.
+
+Nach einem Spiel-Update:
+  Steam hat vermutlich auf eine neuere Version aktualisiert. ChoomLink braucht
+  2.31 -- melde dich, bevor du irgendetwas neu installierst.

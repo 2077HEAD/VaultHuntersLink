@@ -1,0 +1,6 @@
+# ChoomLink server to connect to.
+# Lines starting with # are ignored. No spaces around the "=".
+# "ChoomLink starten.bat" reads this file every launch, so you can change it any time.
+
+address=@SERVER_ADDRESS@
+port=@SERVER_PORT@

@@ -367,3 +367,7 @@ build/
 .idea/
 cmake-build-debug/
 vcpkg_installed/
+# Release artifacts produced by tools/dist.
+# Leading slash matters: an unanchored "dist/" also matches tools/dist/ and would hide the
+# packaging scripts themselves.
+/dist/
