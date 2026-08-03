@@ -432,6 +432,20 @@ void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& enti
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("MeleeWeapon"), true);
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("combatLocomotion"), true);
         Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("WeaponRight"), true);
+        // Ranged sets (choomlink-tru2, 2026-08-03). The aim clips a remote player needs to hold a
+        // gun properly -- aim_ovr_idle / aim_ovr_walk / aim_recoil_upperbody_add -- live in
+        // wa_gang_rifle_action_combat.anims and its per-weapon siblings, and puppet_base.ent gates
+        // those behind `Wea_Rifle` / `Wea_Handgun` / `Wea_Shotgun`, with the ranged locomotion set
+        // additionally behind `RangedWeapon`. None of those were ever set, so every ranged clip was
+        // unreachable -- which is why nothing could raise the weapon regardless of what the graph
+        // asked for.
+        //
+        // Forced rather than derived from the equipped weapon, for the same reason the three above
+        // are: a set that is not loaded makes its clips silently render a bind pose, and the cost
+        // of loading a set nobody plays from is far lower than that failure mode.
+        Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("RangedWeapon"), true);
+        Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("Wea_Rifle"), true);
+        Red::CallVirtual(this, "SetInputBool", entity, RED4ext::CName("Wea_Handgun"), true);
         // Weapon sync: make the puppet a valid target (attitude neutral, not Judy-friendly) —
         // same one-shot setup point as the animset inputs.
         Red::CallVirtual(this, "SetupPuppetAttitude", entity);
