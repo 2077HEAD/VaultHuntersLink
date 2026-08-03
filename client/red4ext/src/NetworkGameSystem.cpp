@@ -498,6 +498,18 @@ void NetworkGameSystem::DriveLocomotionFeed(const Red::Handle<Red::Entity>& enti
 
     const RED4ext::Handle<RED4ext::anim::AnimFeature> base = feature;
     Red::CallVirtual(this, "ApplyAnimFeature", entity, RED4ext::CName("choomlink_locomotion"), base);
+
+    // Aim layer weight (choomlink-tru2). Second feature under its own name rather than an
+    // unused field of the first: `speed` here means "aim weight 0..1" and is read by exactly
+    // one graph node (choomlink_aim_layer's BlendOverride). Driven off the equip state, so an
+    // unarmed puppet does not hold an invisible weapon.
+    auto aimFeature = Red::MakeScriptedHandle<RED4ext::anim::AnimFeature_PlayerMovement>("animAnimFeature_PlayerMovement");
+    if (aimFeature)
+    {
+        aimFeature->speed = state.weaponDrawn ? 1.0f : 0.0f;
+        const RED4ext::Handle<RED4ext::anim::AnimFeature> aimBase = aimFeature;
+        Red::CallVirtual(this, "ApplyAnimFeature", entity, RED4ext::CName("choomlink_aim"), aimBase);
+    }
 }
 
 void NetworkGameSystem::PollIncomingMessages()

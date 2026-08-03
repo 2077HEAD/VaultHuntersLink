@@ -40,7 +40,19 @@ rc.animFeatures.push({
     forceAllocate: 0,
     name: { $type: 'CName', $storage: 'string', $value: 'choomlink_locomotion' },
 });
-console.log('animFeatures: choomlink_locomotion appended, total =', rc.animFeatures.length);
+// Zweites Feature für die Oberkörper-/Zielebene (Stufe 6, choomlink-tru2). Eigener Name
+// statt eines ungenutzten Feldes im ersten Feature: 'standingTerrainAngle' als Zielgewicht
+// zu missbrauchen wäre am nächsten Leser vorbeigebaut. Dieselbe Klasse wiederverwendet —
+// wir lesen daraus nur `speed`, das hier "Zielgewicht 0..1" bedeutet und nirgends sonst
+// gelesen wird.
+rc.animFeatures.push({
+    $type: 'animAnimFeatureEntry',
+    className: { $type: 'CName', $storage: 'string', $value: 'animAnimFeature_PlayerMovement' },
+    debugEnabled: 0,
+    forceAllocate: 0,
+    name: { $type: 'CName', $storage: 'string', $value: 'choomlink_aim' },
+});
+console.log('animFeatures: choomlink_locomotion + choomlink_aim appended, total =', rc.animFeatures.length);
 
 // --- Stufe 2, Step 2: Passthrough-Gate vor dem Output --------------------------------
 // Kette (Anatomie-Doc): Root -> nodes[0]=Output -> node=SkipPerformanceModeEnd ->
@@ -208,14 +220,14 @@ const idleClip = { HandleId: String(nextId++), Data: skAnimNode('idle_stand', 'i
 // FloatInput-Fabrik: group = Feature-Name, name = Feature-Eigenschaft (Mechanismus
 // verifiziert, Anatomie-Doc — Beispiel im Dump: group="crowd_locomotion", name="speed").
 // Kein Graph-Node "schreibt" ein Feature — nur unser C++-Feed tut das.
-function floatInputNode(propName, debugSuffix) {
+function floatInputNode(propName, debugSuffix, group = 'choomlink_locomotion') {
     return {
         HandleId: String(nextId++),
         Data: {
             $type: 'animAnimNode_FloatInput',
             debugInput: 0,
             debugName: { $type: 'CName', $storage: 'string', $value: 'choomlink_' + debugSuffix },
-            group: { $type: 'CName', $storage: 'string', $value: 'choomlink_locomotion' },
+            group: { $type: 'CName', $storage: 'string', $value: group },
             id: 4294967295,
             name: { $type: 'CName', $storage: 'string', $value: propName },
             poseInfoLogger: null,
@@ -379,8 +391,74 @@ const speedBlendNode = {
     },
 };
 
-// Gate-Override zeigt jetzt auf den Speed-Blend statt auf den Switch-Platzhalter aus Stufe 2.
-blendOverrideNode.Data.overrideInputNode = { $type: 'animPoseLink', node: speedBlendNode };
+// --- Stufe 6 (2026-08-03, choomlink-tru2): Oberkörper-Zielebene ------------------------
+// Das Problem, das diese Stufe löst: unser Baum lieferte bis hier ausschließlich
+// Fortbewegung. Die Arme eines bewaffneten Puppets kamen damit aus walk_0/idle_stand —
+// unbewaffneten Clips. Die Waffe hing quer vor dem Körper, und weil ein relayter Schuss der
+// Waffen-Transformation folgt, ging jeder Schuss in den Boden (in-game belegt 2026-08-03).
+//
+// Zwei bereits widerlegte Wege, damit sie niemand erneut geht:
+//   * Maske des Haupt-Gates auf 'aiming_lower_body' — der Vanilla-Oberkörper ist bei unserem
+//     AI-freien Puppet genauso ungetrieben wie unser eigener, also ohne Wirkung.
+//   * NPC-State-Anim-Features (upperBodyState=Aim usw.) — die Eingänge sind zwar deklariert,
+//     ändern die Pose aber nicht.
+// Der Oberkörper muss deshalb aus UNSEREM Baum kommen.
+//
+// aim_ovr_idle ist ein echter Override-Zielclip des Spiels ("ovr" = override), belegt über
+// den clip-index in 21 Sets, darunter wa_gang_rifle_action_combat und
+// wa_gang_handgunboth_action_combat. Beide waren bis 2026-08-03 hinter Wea_Rifle /
+// Wea_Handgun verriegelt — ohne die Entriegelung in NetworkGameSystem.cpp hätte dieser Clip
+// still eine Bind-Pose gerendert.
+//
+// Maske 'bothhand_arms_and_head_LS': echte Rig-Maske des Vanilla-Graphen, semantisch genau
+// unser Fall (beide Arme + Kopf für eine zweihändig geführte Waffe). Die Beine bleiben beim
+// Speed-Blend.
+//
+// Gewicht kommt aus dem zweiten Feature choomlink_aim (Feld `speed` = Zielgewicht 0..1),
+// gefüttert vom C++-Feed aus dem Equip-Zustand: gezogene Waffe = 1, sonst 0. Damit hält ein
+// unbewaffnetes Puppet keine unsichtbare Waffe.
+//
+// NOCH NICHT IN-GAME VERIFIZIERT.
+const aimClip = { HandleId: String(nextId++), Data: skAnimNode('aim_ovr_idle', 'None') };
+const aimWeightInput = floatInputNode('speed', 'aim_weight', 'choomlink_aim');
+
+const aimOverrideNode = {
+    HandleId: String(nextId++),
+    Data: {
+        $type: 'animAnimNode_BlendOverride',
+        blendAllTracks: 1,
+        blendMethod: {
+            HandleId: String(nextId++),
+            Data: {
+                $type: 'animPoseBlendMethod_Mask',
+                maskName: { $type: 'CName', $storage: 'string', $value: 'bothhand_arms_and_head_LS' },
+            },
+        },
+        blendTrackMode: 'AGBT_Interpolate',
+        bones: [],
+        debugName: { $type: 'CName', $storage: 'string', $value: 'choomlink_aim_layer' },
+        getDeltaMotionFromOverride: 0,
+        id: 4294967295,
+        inputNode: { $type: 'animPoseLink', node: speedBlendNode },
+        overrideInputNode: { $type: 'animPoseLink', node: aimClip },
+        poseInfoLogger: null,
+        postProcess: null,
+        syncMethod: null,
+        timeWarpingEnabled: 0,
+        tracks: [],
+        visAxes: 0, visMask: null, visNames: 0, visPostPose: 0,
+        visPostPoseColor: { $type: 'Color', Alpha: 0, Blue: 0, Green: 0, Red: 0 },
+        visPrePose: 0,
+        visPrePoseColor: { $type: 'Color', Alpha: 0, Blue: 0, Green: 0, Red: 0 },
+        visRigPartMask: { $type: 'CName', $storage: 'string', $value: 'None' },
+        visWhenActive: 0,
+        weightNode: { $type: 'animFloatLink', node: aimWeightInput },
+    },
+};
+
+// Gate-Override zeigt jetzt auf die Zielebene (die ihrerseits den Speed-Blend als Basis hat)
+// statt direkt auf den Speed-Blend.
+blendOverrideNode.Data.overrideInputNode = { $type: 'animPoseLink', node: aimOverrideNode };
 
 console.log('Speed-Blend eingebaut: BlendMultiple handle', speedBlendNode.HandleId,
     ', Clips (idle/walk/jog/sprint) handles', idleClip.HandleId, walkClip.HandleId, jogClip.HandleId, sprintClip.HandleId,
