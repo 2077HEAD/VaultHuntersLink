@@ -6,8 +6,16 @@ earlier ones.
 | Script | Does |
 |---|---|
 | `build-client.ps1` | Builds `Cyberverse.Red4Ext.dll` via VsDevCmd + CMake/Ninja |
+| `build-server.ps1` | Builds Server.Native **and** Server.Managed, and copies the native DLLs next to the managed output |
+| `build-bot-harness.ps1` | Builds `bot-harness.exe` |
 | `package-client.ps1` | Assembles the release zip in game-folder layout |
 | `deploy-client.ps1` | Installs that same layout into a local game folder |
+
+`_msvc.ps1` holds the shared VsDevCmd discovery and CMake invocation; the three build
+scripts differ only in which directory they build.
+
+All four components (client plugin, server native, server managed, bot harness) are
+therefore buildable with no scratch files outside the repo.
 
 ## Why the zip layout is also the dev layout
 
@@ -44,7 +52,13 @@ GitHub release. Attach `docs/INSTALL.md` as the release description or link to i
   address/port and exits instead of launching the game, so the launcher can be tested
   without a game install.
 
+- VsDevCmd prints `'vswhere.exe' is not recognized` on this machine. Harmless, it still sets
+  up the toolchain. Do **not** wrap these scripts in `2>&1` from PowerShell 5.1: that turns
+  every stderr line from a native command into an ErrorRecord and aborts the build under
+  `$ErrorActionPreference = 'Stop'`, even though the compiler succeeded.
+
 ## Not covered yet
 
-- Server packaging (`server/Managed` + `server/Native` DLLs) is still manual.
+- Server *packaging* (a zip for someone else to host) — `build-server.ps1` only produces a
+  locally runnable folder.
 - No one-click installer; see choomlink-xrpn for the follow-up idea.
