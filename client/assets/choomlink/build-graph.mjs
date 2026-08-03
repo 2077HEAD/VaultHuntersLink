@@ -410,15 +410,23 @@ const speedBlendNode = {
 // Wea_Handgun verriegelt — ohne die Entriegelung in NetworkGameSystem.cpp hätte dieser Clip
 // still eine Bind-Pose gerendert.
 //
-// Maske 'bothhand_arms_and_head_LS': echte Rig-Maske des Vanilla-Graphen, semantisch genau
-// unser Fall (beide Arme + Kopf für eine zweihändig geführte Waffe). Die Beine bleiben beim
-// Speed-Blend.
+// Maske: 'bothhand_arms_and_head_LS' brachte die Waffe hoch, drehte aber den GESAMTEN
+// Oberkörper rund 90° quer (in-game 2026-08-03) — die Maske greift zu weit, sie nimmt Kopf
+// und Rumpf mit und erzwingt damit die im Clip eingebackene Rumpfausrichtung.
+// 'weapon_override' ist die engere Vanilla-Maske (8 Verwendungen im Graphen), deren Name
+// genau diesen Fall bezeichnet: nur die waffenführenden Knochen überschreiben, Rumpf und
+// Kopf beim Basis-Pfad lassen — dort steuert sie der bereits laufende LookAt.
 //
 // Gewicht kommt aus dem zweiten Feature choomlink_aim (Feld `speed` = Zielgewicht 0..1),
 // gefüttert vom C++-Feed aus dem Equip-Zustand: gezogene Waffe = 1, sonst 0. Damit hält ein
 // unbewaffnetes Puppet keine unsichtbare Waffe.
 //
 // NOCH NICHT IN-GAME VERIFIZIERT.
+// Kandidaten, absteigend nach Enge: 'weapon_override' (nur waffenführende Knochen),
+// 'r_arm_MS'/'l_arm_MS' (einzelne Arme), 'bothhand_arms_and_head_LS' (Arme+Kopf+Rumpf,
+// belegt zu weit). Eine Konstante, ein Rebuild.
+const AIM_MASK = 'weapon_override';
+
 const aimClip = { HandleId: String(nextId++), Data: skAnimNode('aim_ovr_idle', 'None') };
 const aimWeightInput = floatInputNode('speed', 'aim_weight', 'choomlink_aim');
 
@@ -431,7 +439,7 @@ const aimOverrideNode = {
             HandleId: String(nextId++),
             Data: {
                 $type: 'animPoseBlendMethod_Mask',
-                maskName: { $type: 'CName', $storage: 'string', $value: 'bothhand_arms_and_head_LS' },
+                maskName: { $type: 'CName', $storage: 'string', $value: AIM_MASK },
             },
         },
         blendTrackMode: 'AGBT_Interpolate',
