@@ -955,6 +955,10 @@ void NetworkGameSystem::ApplyEquipPacket(const Red::Handle<Red::Entity>& entity,
                      RED4ext::TweakDBID(equip.itemId), equip.isUnequipping);
     auto& moveState = m_movementState[entityId];
     moveState.weaponDrawn = !equip.isUnequipping;
+    // Drawn weapon => combat/aiming pose. Driven off the equip state rather than off firing, so a
+    // remote player who is merely holding a weapon already stands like it (and so the weapon is
+    // raised before the first shot rather than after it).
+    Red::CallVirtual(this, "SetPuppetCombatPose", entity, !equip.isUnequipping);
     if (equip.isUnequipping)
     {
         Red::CallVirtual(this, "ClearAimOnPuppet", entity);

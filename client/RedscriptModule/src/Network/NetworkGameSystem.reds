@@ -382,6 +382,43 @@ public native class NetworkGameSystem extends IGameSystem {
         FTLog(s"[ChoomLink] remote shot for puppet \(EntityID.GetHash(puppet.GetEntityID()))");
     }
 
+    // Puts the puppet into a combat/aiming animation state, or back to relaxed.
+    //
+    // Why this is likely the missing piece for damage (live finding 2026-08-03): the relayed shot
+    // visibly went INTO THE GROUND while the puppet held its weapon low across the body. A shot
+    // follows the weapon transform, and that comes from the animation pose. A vanilla NPC raises
+    // its weapon because its behaviour tree drives these very NPC-state anim features; our
+    // AI-free puppet has no behaviour tree, so nothing ever raises the weapon. The upper-body
+    // LookAt we already apply turns head and chest, not the weapon axis.
+    //
+    // Recipe copied from the game's own npcStateComponent (UpdateUpperBodyState :603-606,
+    // UpdateStanceState :932-935): build an AnimFeature_NPCState, put the enum's Int in `state`,
+    // apply it under the graph's feature name. The feature names are the ones the puppet's graph
+    // actually declares (`find-inputs` on the animgraph dump: highLevelState, upperBodyState,
+    // stanceState).
+    public func SetPuppetCombatPose(entity: ref<Entity>, aiming: Bool) {
+        let go = entity as GameObject;
+        if !IsDefined(go) {
+            return;
+        }
+
+        let highLevel = new AnimFeature_NPCState();
+        highLevel.state = aiming ? EnumInt(gamedataNPCHighLevelState.Combat)
+                                 : EnumInt(gamedataNPCHighLevelState.Relaxed);
+        AnimationControllerComponent.ApplyFeature(go, n"highLevelState", highLevel);
+
+        let upperBody = new AnimFeature_NPCState();
+        upperBody.state = aiming ? EnumInt(gamedataNPCUpperBodyState.Aim)
+                                 : EnumInt(gamedataNPCUpperBodyState.Normal);
+        AnimationControllerComponent.ApplyFeature(go, n"upperBodyState", upperBody);
+
+        // Stand explicitly: the feature defaults to 0 (= Any), which is a wildcard for matching,
+        // not a real stance, and leaves the graph without a concrete stance to blend from.
+        let stance = new AnimFeature_NPCState();
+        stance.state = EnumInt(gamedataNPCStanceState.Stand);
+        AnimationControllerComponent.ApplyFeature(go, n"stanceState", stance);
+    }
+
     // Makes the local player a known threat on the puppet's target tracker, once per puppet.
     //
     // This is not about AI behaviour -- the puppet has none. It is the prerequisite for
