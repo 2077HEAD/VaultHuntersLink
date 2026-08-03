@@ -91,6 +91,42 @@ const floatConstNode = {
     },
 };
 
+// --- Stufe 5 (2026-08-03, choomlink-tru2): Maske des Gates ----------------------------
+// Bis hierher lief das Gate mit 'fullbody' bei Gewicht 1 — unser Locomotion-Baum ersetzte
+// also die GESAMTE Vanilla-Pose, Oberkörper eingeschlossen. Konsequenz, am 2026-08-03
+// in-game belegt: die Arme eines bewaffneten Puppets kommen aus walk_0/idle_stand, also aus
+// UNBEWAFFNETEN Laufclips. Die Waffe hängt quer vor dem Körper, und weil ein relayter
+// Schuss der Waffen-Transformation folgt, geht jeder Schuss in den Boden (Leuchtspur +
+// Staub vor den Füßen im Screenshot). Kein Zielsystem-Fehler — ein Masken-Fehler.
+//
+// 'aiming_lower_body' ist eine echte Rig-Maske des Vanilla-Graphen und wird dort auf
+// GENAU DIESEM Knotentyp (animAnimNode_BlendOverride) verwendet — der Name sagt die
+// Semantik: beim Zielen besitzt die Fortbewegung den Unterkörper, die Zielebene den
+// Oberkörper. Damit behält unser Baum Beine und Hüfte (das, wofür er gebaut wurde) und
+// gibt Arme, Brust und Waffe an den Vanilla-Pfad zurück, der auf LookAt und die
+// NPC-State-Features reagiert.
+//
+// VERSUCH 'aiming_lower_body' — am 2026-08-03 gebaut, gebacken, gepackt, deployt und
+// in-game getestet: KEINE beobachtbare Änderung. Die Waffe hängt unverändert quer vor dem
+// Körper, weiterhin kein Schaden.
+//
+// Erklärung (plausibel, nicht bewiesen): der Vanilla-Oberkörper ist bei unserem Puppet
+// genauso ungetrieben wie unser eigener. Ohne Behaviour Tree, ohne NPC-State-Verdrahtung
+// liefert auch der Vanilla-Pfad eine entspannte Idle-Pose — die Maske gibt den Oberkörper
+// also von einer ungetriebenen Quelle an eine andere ungetriebene Quelle weiter.
+//
+// Zurück auf 'fullbody', weil das die belegte, funktionierende Konfiguration ist: eine
+// unverifizierte Änderung an der Kernfunktion Fortbewegung ohne gemessenen Nutzen zu
+// behalten, wäre genau das spekulative Risiko, das die Projektregeln ausschließen.
+// (Die Fortbewegung unter 'aiming_lower_body' konnte ich nicht absichern — der Testbot lief
+// aus dem Bild.)
+//
+// Was die Analyse trotzdem geklärt hat, und das ist der eigentliche Fund: Gewicht 1 +
+// 'fullbody' heißt, die Arme des Puppets stammen aus UNBEWAFFNETEN Laufclips. Eine
+// Zielhaltung muss deshalb in UNSEREM Baum entstehen (eigene Oberkörper-Ebene mit einem
+// Aim-Clip), nicht durch Zurückgeben an Vanilla. Siehe choomlink-tru2.
+const GATE_MASK = 'fullbody'; // Versuch 'aiming_lower_body' widerlegt, siehe oben
+
 const blendOverrideNode = {
     HandleId: blendOverrideId,
     Data: {
@@ -98,7 +134,7 @@ const blendOverrideNode = {
         blendAllTracks: 1,
         blendMethod: {
             HandleId: String(nextId++),
-            Data: { $type: 'animPoseBlendMethod_Mask', maskName: { $type: 'CName', $storage: 'string', $value: 'fullbody' } },
+            Data: { $type: 'animPoseBlendMethod_Mask', maskName: { $type: 'CName', $storage: 'string', $value: GATE_MASK } },
         },
         blendTrackMode: 'AGBT_Interpolate',
         bones: [],
