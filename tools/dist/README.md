@@ -8,8 +8,9 @@ earlier ones.
 | `build-client.ps1` | Builds `Cyberverse.Red4Ext.dll` via VsDevCmd + CMake/Ninja |
 | `build-server.ps1` | Builds Server.Native **and** Server.Managed, and copies the native DLLs next to the managed output |
 | `build-bot-harness.ps1` | Builds `bot-harness.exe` |
+| `check-redscript.ps1` | Type-checks the `.reds` sources against the game bundle, no game start |
 | `package-client.ps1` | Assembles the release zip in game-folder layout |
-| `deploy-client.ps1` | Installs that same layout into a local game folder |
+| `deploy-client.ps1` | Type-checks, then installs that same layout into a local game folder |
 
 `_msvc.ps1` holds the shared VsDevCmd discovery and CMake invocation; the three build
 scripts differ only in which directory they build.
@@ -39,6 +40,22 @@ Release build for testers:
 
 Output lands in `dist\` (gitignored) together with the SHA256 to publish alongside the
 GitHub release. Attach `docs/INSTALL.md` as the release description or link to it.
+
+## The redscript pre-check
+
+`deploy-client.ps1` type-checks the scripts before they reach the game folder, because the
+alternative feedback loop is: launch the game, wait, watch it die at startup, read
+`r6\logs\redscript_rCURRENT.log`. The check takes about a second and found two real errors
+the first time it ran.
+
+It compiles against `final.redscripts` — the untouched vanilla bundle — deliberately **not**
+`final.redscripts.modded`, which already contains a previous compile of our own sources and
+would let a stale definition satisfy a reference the real startup compile rejects.
+
+**It cannot catch a `native` declaration whose C++ side is missing.** Natives are registered
+into RTTI by the RED4ext plugin at runtime, so no bundle can confirm them here — and that is
+exactly the `UNRESOLVED_METHOD` failure that kills the game at startup. Adding a native still
+means checking the `RTTI_METHOD` line in the header by eye.
 
 ## Notes
 

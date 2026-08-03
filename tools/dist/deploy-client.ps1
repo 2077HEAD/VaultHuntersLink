@@ -29,6 +29,20 @@ if (-not (Test-Path (Join-Path $GamePath 'bin\x64\Cyberpunk2077.exe'))) {
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $outDir   = Join-Path $repoRoot 'dist'
 
+# Type-check the scripts before they land in the game folder. A redscript error otherwise only
+# shows up as the game dying at startup, several minutes later.
+#
+# A failing check aborts the deploy -- shipping scripts that are known not to compile just moves
+# the failure somewhere more expensive. A *missing* redscript-cli only warns, so the absence of an
+# optional tool never blocks anyone.
+$redscriptCli = 'C:\Users\G4M3R\Tools\redscript-cli\redscript-cli.exe'
+if (Test-Path $redscriptCli) {
+    & (Join-Path $PSScriptRoot 'check-redscript.ps1') -GamePath $GamePath -RedscriptCli $redscriptCli
+} else {
+    Write-Warning "redscript-cli not found at $redscriptCli -- skipping the script type-check."
+    Write-Warning "Check r6\logs\redscript_rCURRENT.log after launching."
+}
+
 $packageArgs = @{
     ServerAddress = $ServerAddress
     ServerPort    = $ServerPort

@@ -173,17 +173,20 @@ public class ChoomLinkPlayerHealthListener extends ScriptStatPoolsListener {
     private let m_player: wref<PlayerPuppet>;
     // Rate limit: the pool ticks continuously during regeneration, and every tick would otherwise
     // become a packet. Half a percent is below what any observer can see on a health bar.
-    private let m_lastReported: Float = -1.0;
+    // (Separate flag rather than a negative sentinel: redscript rejects negative field defaults.)
+    private let m_lastReported: Float;
+    private let m_hasReported: Bool;
 
     public func SetPlayer(player: ref<PlayerPuppet>) -> Void {
         this.m_player = player;
     }
 
     public func OnStatPoolValueChanged(oldValue: Float, newValue: Float, percToPoints: Float) -> Void {
-        if this.m_lastReported >= 0.0 && AbsF(newValue - this.m_lastReported) < 0.5 && newValue > 0.0 {
+        if this.m_hasReported && AbsF(newValue - this.m_lastReported) < 0.5 && newValue > 0.0 {
             return;
         }
         this.m_lastReported = newValue;
+        this.m_hasReported = true;
         let isDead = newValue <= 0.0;
         GameInstance.GetNetworkGameSystem().playerActionTracker.OnPlayerHealthChanged(newValue, isDead);
     }

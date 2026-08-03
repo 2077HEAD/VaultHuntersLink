@@ -343,8 +343,69 @@ public native class NetworkGameSystem extends IGameSystem {
             return;
         }
         let target = this.AimTargetFor(puppet, yaw, pitch, 50.0);
-        AIWeapon.Fire(puppet, weapon, 0.0, 1.0, gamedataTriggerMode.SemiAuto, target);
+
+        // Why no `target` argument (7th) even though we have the local player right here:
+        //
+        // Passing it hands the shot to TargetShootComponent, the game's deliberate-miss system
+        // (weapon.script:1542-1546 -> targetShootComponent.script:47). That system enforces a
+        // minimum TIME between hits on the player and computes an offset to miss with in between
+        // (HandleMissed, :79-101). It is an anti-frustration mechanic for the single player, and
+        // in PvP it would mean a timer on the victim's machine decides hits instead of the
+        // shooter's aim. Two of its conditions would also block us permanently: Accuracy == 0 on
+        // the shooter misses every shot (:288-290), and its visibility coefficient needs a
+        // continuous line of sight accumulated by AI perception (:210-214), which an AI-free
+        // puppet never builds. With target == null the whole block is skipped.
+        //
+        // The cost is that both AI_ShootAt branches then hinge on IsPositionValid
+        // (weapon.script:1572-1584); failing it drops to AI_ShootForwards, which fires along the
+        // weapon's own forward axis and ignores the aim point entirely -- visible shot, no hit.
+        // That was the 2026-07-31 symptom. EnsureThreatRegistered below is what satisfies it.
+        this.EnsureThreatRegistered(puppet);
+
+        // Explicit ranged attack: without it SetAttackBasedOnTimeDilation dereferences
+        // weapon.GetCurrentRangedAttack() unguarded (weapon.script:1643). On a puppet whose weapon
+        // no AI action ever touched that is null, and the projectile carries no damage payload.
+        // The override is a RangedAttack_Record id (weapon.script:1635 feeds it to
+        // GetRangedAttackRecord). Vanilla's own fallback chain is
+        // GetCurrentRangedAttack().DefaultFire(); the static equivalent that does not depend on
+        // any AI having touched the weapon is WeaponItem_Record.RangedAttacks().DefaultFire().
+        let rangedAttack: TweakDBID;
+        if !IsDefined(weapon.GetCurrentRangedAttack()) {
+            let weaponRecord = TweakDBInterface.GetWeaponItemRecord(ItemID.GetTDBID(weapon.GetItemID()));
+            if IsDefined(weaponRecord) && IsDefined(weaponRecord.RangedAttacks())
+                && IsDefined(weaponRecord.RangedAttacks().DefaultFire()) {
+                rangedAttack = weaponRecord.RangedAttacks().DefaultFire().GetID();
+            }
+        }
+
+        AIWeapon.Fire(puppet, weapon, 0.0, 1.0, gamedataTriggerMode.SemiAuto, target, null, rangedAttack);
         FTLog(s"[ChoomLink] remote shot for puppet \(EntityID.GetHash(puppet.GetEntityID()))");
+    }
+
+    // Makes the local player a known threat on the puppet's target tracker, once per puppet.
+    //
+    // This is not about AI behaviour -- the puppet has none. It is the prerequisite for
+    // AIWeapon.Fire to take the AI_ShootAt branch: both of its guards call
+    // TargetTrackerComponent.IsPositionValid, and a tracker with no threats rejects every
+    // position, silently degrading the shot to AI_ShootForwards along the weapon's own axis.
+    //
+    // isPersistent = true so a single registration lasts; accuracy 1.0 and no cooldown because
+    // nothing here should modulate whether a player's shot lands -- geometry decides that.
+    private func EnsureThreatRegistered(puppet: ref<ScriptedPuppet>) -> Void {
+        if puppet.choomlink_threatRegistered {
+            return;
+        }
+        let tracker = puppet.GetTargetTrackerComponent();
+        if !IsDefined(tracker) {
+            return;
+        }
+        let player = GameInstance.GetPlayerSystem(puppet.GetGame()).GetLocalPlayerMainGameObject();
+        if !IsDefined(player) {
+            return;
+        }
+        tracker.AddThreat(player, true, player.GetWorldPosition(), 1.0, 0.0, true);
+        puppet.choomlink_threatRegistered = true;
+        FTLog(s"[ChoomLink] threat registered on puppet \(EntityID.GetHash(puppet.GetEntityID()))");
     }
 
     // Remote players must be shootable: the Judy-derived record is attitude-Friendly, which
@@ -377,6 +438,11 @@ public native class NetworkGameSystem extends IGameSystem {
 // Per-puppet aim LookAt state (redscript has no map type; the puppet itself carries it).
 @addField(ScriptedPuppet)
 let choomlink_aimLookAt: ref<LookAtAddEvent>;
+
+// One-shot guard for EnsureThreatRegistered — re-adding the same threat on every shot would
+// churn the tracker at the weapon's fire rate.
+@addField(ScriptedPuppet)
+let choomlink_threatRegistered: Bool;
 
 @addMethod(GameInstance)
 public static native func GetNetworkGameSystem() -> ref<NetworkGameSystem>
