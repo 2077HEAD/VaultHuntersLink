@@ -184,9 +184,6 @@ public class ChoomLinkPlayerHealthListener extends ScriptStatPoolsListener {
     // (Separate flag rather than a negative sentinel: redscript rejects negative field defaults.)
     private let m_lastReported: Float;
     private let m_hasReported: Bool;
-    // Ein bereits abgeschicktes, noch nicht wirksames AddModifier nicht jede Runde
-    // wiederholen — sonst stapeln sich Modifikatoren, waehrend der erste noch unterwegs ist.
-    private let m_heartPending: Bool;
 
     public func SetPlayer(player: ref<PlayerPuppet>) -> Void {
         this.m_player = player;
@@ -201,15 +198,9 @@ public class ChoomLinkPlayerHealthListener extends ScriptStatPoolsListener {
         if IsDefined(this.m_player) {
             let stats = GameInstance.GetStatsSystem(this.m_player.GetGame());
             let objId = Cast<StatsObjectID>(this.m_player.GetEntityID());
-            if stats.GetStatValue(objId, gamedataStatType.HasSecondHeart) > 0.0 {
-                this.m_heartPending = false;
-            } else {
-                if !this.m_heartPending {
-                    this.m_heartPending = true;
-                    stats.AddModifier(objId, RPGManager.CreateStatModifier(
-                        gamedataStatType.HasSecondHeart, gameStatModifierType.Additive, 1.0));
-                    GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(25, newValue);
-                }
+            if stats.GetStatValue(objId, gamedataStatType.HasSecondHeart) <= 0.0 {
+                GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(25, newValue);
+                ChoomLinkRespawn.GrantSecondHeart(this.m_player);
             }
         }
 
@@ -257,7 +248,10 @@ protected cb func OnGameAttached() -> Bool {
 //     -> SetIsResurrectionAllowedBasedOnState erlaubt die Wiederbelebung und setzt das
 //        Todesmenue-Blackboard gar nicht erst (:169-183)
 //     -> ResurrectEvents.OnEnter legt BaseStatusEffect.SecondHeart als ABKLINGZEIT an (:598),
-//        ResurrectDecisions wartet auf deren Ablauf (:583)
+//        ResurrectDecisions wartet auf deren Ablauf (:583). Dieser Effekt enthaelt laut
+//        TweakDB (zur Laufzeit ausgelesen 2026-08-07) genau ein Paket mit genau einem
+//        Modifikator: IsInvulnerable, additiv +1. Er ruehrt HasSecondHeart NICHT an und ist
+//        fuer unseren Fall folgenlos — er macht nur kurz unverwundbar.
 //     -> PlayerPuppet.OnResurrected ist bereits mehrspielerbewusst: 20 % statt 100 %
 //        bei IsMultiplayer (player.script:5177-5190)
 //
@@ -270,8 +264,22 @@ public class ChoomLinkRespawn {
     public static func GrantSecondHeart(player: ref<PlayerPuppet>) -> Void {
         let stats = GameInstance.GetStatsSystem(player.GetGame());
         let objId = Cast<StatsObjectID>(player.GetEntityID());
-        if stats.GetStatValue(objId, gamedataStatType.HasSecondHeart) <= 0.0 {
-            stats.AddModifier(objId, RPGManager.CreateStatModifier(
+        // 26 = Stat VOR unserem Zugriff. Ohne diesen Wert laesst sich nicht unterscheiden,
+        // ob der Stat von uns kommt oder aus einer getragenen Zweitherz-Cyberware — genau
+        // diese Verwechslung hat am 2026-08-07 drei Testlaeufe wertlos gemacht.
+        let before = stats.GetStatValue(objId, gamedataStatType.HasSecondHeart);
+        GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(26, before);
+        if before <= 0.0 {
+            // ForceModifier statt AddModifier. Ein per AddModifier gesetzter Modifikator
+            // ueberlebt die Wiederbelebung nicht: am 2026-08-07 stand der Stat beim zweiten
+            // Tod wieder auf 0, und ein erneutes AddModifier holte ihn ueber sechs Sekunden
+            // nicht zurueck, obwohl derselbe Aufruf beim Anhaengen des Puppets sofort wirkt.
+            //
+            // AddSavedModifier waere die andere Moeglichkeit, scheidet aber aus: "saved"
+            // heisst in den Spielstand geschrieben, und ein Mehrspieler-Detail hat im
+            // Einzelspieler-Save des Nutzers nichts verloren. ForceModifier wirkt nur zur
+            // Laufzeit — genau die Reichweite, die wir wollen.
+            stats.ForceModifier(objId, RPGManager.CreateStatModifier(
                 gamedataStatType.HasSecondHeart, gameStatModifierType.Additive, 1.0));
         }
         // Gemessen statt angenommen: ob der Stat wirklich anliegt, entscheidet ueber den
