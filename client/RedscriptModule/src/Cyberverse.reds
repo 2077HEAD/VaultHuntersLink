@@ -324,20 +324,25 @@ protected func OnResurrected() -> Void {
         .GetStatPoolValue(Cast<StatsObjectID>(this.GetEntityID()), gamedataStatPoolType.Health, true);
     GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(22, health);
 
-    // Abklingzeit abraeumen. ResurrectEvents.OnEnter legt BaseStatusEffect.SecondHeart als
-    // Sperre an (highLevelTransitions.script:598) — im Vanilla-Spiel darf das Zweitherz nur
-    // einmal pro Abklingzeit retten. Auf einem PvP-Server ist das untragbar: am 2026-08-07
-    // fuehrte der zweite Tod sechs Sekunden nach dem ersten wieder ins FLATLINED-Menue und
-    // damit aus der Sitzung.
+    // BaseStatusEffect.SecondHeart bleibt bewusst LIEGEN. Er wurde hier zeitweise abgeraeumt,
+    // in der Annahme, er sperre den naechsten Respawn — das war falsch, und das Abraeumen war
+    // schaedlich:
     //
-    // Hier ist das Aufraeumen sicher: OnResurrected haengt an ResurrectEvents.OnExit, der
-    // Zustand ist also bereits verlassen und ResurrectDecisions.ToExploration (:583) liest
-    // die Restdauer nicht mehr.
+    // Der Datensatz enthaelt laut TweakDB (zur Laufzeit ausgelesen 2026-08-07) genau ein Paket
+    // mit genau einem Modifikator: IsInvulnerable, additiv +1. Er ist damit der SPAWNSCHUTZ
+    // nach der Wiederbelebung, nicht die Sperre dagegen. DeathDecisions.EnterCondition steigt
+    // bei aktiver Invulnerable-Gottheit sofort aus (highLevelTransitions.script:506-508) —
+    // genau das gibt dem Spieler die Sekunden, um nach dem Respawn wegzukommen.
     //
-    // 23 = Zweitherz-Stat nach dem Abraeumen. Wieder gemessen statt angenommen: liegt der
-    // Wert hier bei 0, sperrt nicht die Abklingzeit selbst, sondern ein Modifikator auf dem
-    // Stat — dann muesste die Sperre woanders geloest werden.
-    StatusEffectHelper.RemoveStatusEffect(this, t"BaseStatusEffect.SecondHeart");
+    // Ohne ihn steht der Spieler unter Dauerfeuer in einer Todesschleife: sterben, wiederbelebt
+    // werden, im selben Atemzug wieder sterben. Vom Nutzer am 2026-08-07 im Spiel gesehen
+    // ("ich sehe den revive jetzt die ganze Zeit"), und im Log mit 275 Gesundheitsmeldungen in
+    // 45 Sekunden wiedergefunden.
+    //
+    // Den zweiten Respawn sperrte in Wahrheit der verlorene HasSecondHeart-Stat; dafuer ist
+    // ForceModifier zustaendig, nicht das Entfernen dieses Effekts.
+    //
+    // 23 = Zweitherz-Stat nach der Wiederbelebung.
     GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(23,
         GameInstance.GetStatsSystem(this.GetGame())
             .GetStatValue(Cast<StatsObjectID>(this.GetEntityID()), gamedataStatType.HasSecondHeart));
