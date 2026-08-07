@@ -1006,8 +1006,16 @@ void NetworkGameSystem::ApplyEquipPacket(const Red::Handle<Red::Entity>& entity,
 
 void NetworkGameSystem::ApplyHealthPacket(const Red::Handle<Red::Entity>& entity, const EntityHealth& health)
 {
-    SDK->logger->TraceF(PLUGIN, "diag: entity %llu health %.1f%% dead=%d", health.networkedEntityId,
-                        health.healthPercent, health.isDead ? 1 : 0);
+    // Info, not Trace: Trace is filtered out of the plugin's log file entirely (verified
+    // 2026-08-07 — not one trace line in any session log, while info lines abound), and this
+    // number is the only evidence that "health agrees on both clients" actually holds. Judging
+    // that from a health bar in a screenshot is guesswork; comparing the value the victim
+    // reported against the value the observer applied is not.
+    //
+    // The volume is bounded by the sender: it rate-limits to half-percent steps, so this logs
+    // no more often than the health genuinely changes.
+    SDK->logger->InfoF(PLUGIN, "diag: entity %llu health %.1f%% dead=%d", health.networkedEntityId,
+                       health.healthPercent, health.isDead ? 1 : 0);
     Red::CallVirtual(this, "ApplyHealthOnPuppet", entity, health.healthPercent, health.isDead);
 }
 
