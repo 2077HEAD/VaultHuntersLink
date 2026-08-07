@@ -184,12 +184,35 @@ public class ChoomLinkPlayerHealthListener extends ScriptStatPoolsListener {
     // (Separate flag rather than a negative sentinel: redscript rejects negative field defaults.)
     private let m_lastReported: Float;
     private let m_hasReported: Bool;
+    // Ein bereits abgeschicktes, noch nicht wirksames AddModifier nicht jede Runde
+    // wiederholen — sonst stapeln sich Modifikatoren, waehrend der erste noch unterwegs ist.
+    private let m_heartPending: Bool;
 
     public func SetPlayer(player: ref<PlayerPuppet>) -> Void {
         this.m_player = player;
     }
 
     public func OnStatPoolValueChanged(oldValue: Float, newValue: Float, percToPoints: Float) -> Void {
+        // Zweitherz-Stat auffrischen. Er geht im Wiederbelebungspfad verloren (gemessen
+        // 2026-08-07), und weil AddModifier verzoegert wirkt, muss das lange vor dem
+        // naechsten Tod passieren. Dieser Listener ist dafuer die richtige Stelle: er feuert
+        // bei jeder Gesundheitsaenderung, also auch waehrend der Regeneration nach dem
+        // Respawn — Sekunden bevor der Stat wieder gebraucht wird.
+        if IsDefined(this.m_player) {
+            let stats = GameInstance.GetStatsSystem(this.m_player.GetGame());
+            let objId = Cast<StatsObjectID>(this.m_player.GetEntityID());
+            if stats.GetStatValue(objId, gamedataStatType.HasSecondHeart) > 0.0 {
+                this.m_heartPending = false;
+            } else {
+                if !this.m_heartPending {
+                    this.m_heartPending = true;
+                    stats.AddModifier(objId, RPGManager.CreateStatModifier(
+                        gamedataStatType.HasSecondHeart, gameStatModifierType.Additive, 1.0));
+                    GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(25, newValue);
+                }
+            }
+        }
+
         if this.m_hasReported && AbsF(newValue - this.m_lastReported) < 0.5 && newValue > 0.0 {
             return;
         }
@@ -264,11 +287,22 @@ public class ChoomLinkRespawn {
 @wrapMethod(DeathEvents)
 protected func OnEnter(stateContext: ref<StateContext>, scriptInterface: ref<StateGameScriptInterface>) -> Void {
     let tracker = GameInstance.GetNetworkGameSystem().playerActionTracker;
-    // 21 = Tod betreten, als Wert der Zweitherz-Stat in diesem Moment. Nicht konstant 1.0:
-    // genau dieser Wert entscheidet, ob eine Wiederbelebung folgt oder das Todesmenue kommt,
-    // und beim zweiten Tod innerhalb weniger Sekunden kam am 2026-08-07 das Menue.
-    tracker.LogDiag(21, GameInstance.GetStatsSystem(scriptInterface.owner.GetGame())
-        .GetStatValue(Cast<StatsObjectID>(scriptInterface.ownerEntityID), gamedataStatType.HasSecondHeart));
+    // Beide Stats, die SetIsResurrectionAllowedBasedOnState abfragt (:172-173), im Moment des
+    // Todes. Beim zweiten Tod sechs Sekunden nach dem ersten kam am 2026-08-07 wieder das
+    // Todesmenue — welches der beiden Tore zufiel, ist ohne Messung nicht zu unterscheiden,
+    // und der Statuseffekt SecondHeart taucht in diesem Tor ueberhaupt nicht auf.
+    //   21 = HasSecondHeart, 24 = ForcePreventResurrect
+    let stats = GameInstance.GetStatsSystem(scriptInterface.owner.GetGame());
+    let objId = Cast<StatsObjectID>(scriptInterface.ownerEntityID);
+    tracker.LogDiag(21, stats.GetStatValue(objId, gamedataStatType.HasSecondHeart));
+    tracker.LogDiag(24, stats.GetStatValue(objId, gamedataStatType.ForcePreventResurrect));
+
+    // HIER wird der Stat bewusst NICHT mehr nachgezogen. Der Versuch steht dokumentiert,
+    // weil sein Scheitern die eigentliche Regel zeigt: StatsSystem.AddModifier wirkt nicht
+    // sofort. Am 2026-08-07 las die Sonde unmittelbar nach dem AddModifier immer noch 0
+    // (code 20 = 0.00 im selben Logeintrag wie code 21 = 0.00). Ein Nachziehen im
+    // Todesmoment kommt also grundsaetzlich zu spaet, unabhaengig von der Reihenfolge.
+    // Das Auffrischen sitzt stattdessen im Gesundheits-Listener, wo Zeit dafuer ist.
     tracker.OnPlayerHealthChanged(0.0, true);
     wrappedMethod(stateContext, scriptInterface);
 }
