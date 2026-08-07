@@ -77,6 +77,15 @@ private:
     // from OnStartTrackingEntity right behind SpawnEntity. Same buffer, same flush point.
     std::map<uint64_t, EntityHealth> m_pendingHealth;
 
+    // Last logged threat/shoot status PER SHOOTER, so a status only has to change for that puppet
+    // to be logged again. These were `static` locals until 2026-08-07, i.e. one value shared by
+    // every shooter in the process -- which made the diagnostic blind to exactly the case it was
+    // needed for: a freshly spawned puppet whose status happens to equal the previous puppet's
+    // last one logs nothing at all. A bot-harness restart produced 40 minutes of silence that way.
+    // A new entity has no entry here, so its first status always reaches the log.
+    std::map<uint64_t, int32_t> m_lastThreatStatus;
+    std::map<uint64_t, int32_t> m_lastShootStatus;
+
     // Applies one EquipItemEntity to a resolved puppet: redscript TransactionSystem apply +
     // the movement-state bookkeeping (weaponDrawn, aim LookAt teardown on unequip).
     void ApplyEquipPacket(const Red::Handle<Red::Entity>& entity, RED4ext::ent::EntityID entityId,

@@ -858,12 +858,14 @@ void NetworkGameSystem::PollIncomingMessages()
             // readable in the log file (redscript's own FTLog only reaches the CET console).
             int32_t threatStatus = -1;
             Red::CallVirtual(this, "EnsureThreatRegistered", threatStatus, shooter.value());
-            static int32_t s_lastThreatStatus = -99;
-            if (threatStatus != s_lastThreatStatus)
+            if (const auto seen = m_lastThreatStatus.find(entity_shoot.networkedEntityId);
+                seen == m_lastThreatStatus.end() || seen->second != threatStatus)
             {
-                s_lastThreatStatus = threatStatus;
-                SDK->logger->InfoF(PLUGIN, "diag: threat status %d (0=already 1=registered 2=no-tracker 3=no-player 4=not-a-puppet)",
-                                   threatStatus);
+                m_lastThreatStatus[entity_shoot.networkedEntityId] = threatStatus;
+                SDK->logger->InfoF(PLUGIN,
+                                   "diag: entity %llu threat status %d (0=already 1=registered "
+                                   "2=no-tracker 3=no-player 4=not-a-puppet)",
+                                   entity_shoot.networkedEntityId, threatStatus);
             }
 
             SDK->logger->TraceF(PLUGIN, "diag: entity %llu shot weapon %llu", entity_shoot.networkedEntityId,
@@ -872,14 +874,14 @@ void NetworkGameSystem::PollIncomingMessages()
             int32_t shootStatus = -1;
             Red::CallVirtual(this, "ApplyShootOnPuppet", shootStatus, shooter.value(), shooterMoveState.targetYaw,
                              shooterMoveState.targetPitch, entity_shoot.charge, entity_shoot.damagePerHit);
-            static int32_t s_lastShootStatus = -99;
-            if (shootStatus != s_lastShootStatus)
+            if (const auto seen = m_lastShootStatus.find(entity_shoot.networkedEntityId);
+                seen == m_lastShootStatus.end() || seen->second != shootStatus)
             {
-                s_lastShootStatus = shootStatus;
+                m_lastShootStatus[entity_shoot.networkedEntityId] = shootStatus;
                 SDK->logger->InfoF(PLUGIN,
-                                   "diag: shoot status %d (0=own-attack 1=fallback-attack "
+                                   "diag: entity %llu shoot status %d (0=own-attack 1=fallback-attack "
                                    "2=NO-attack 3=no-weapon 4=not-a-puppet 5=weapon-not-attached)",
-                                   shootStatus);
+                                   entity_shoot.networkedEntityId, shootStatus);
             }
         }
         break;
@@ -944,6 +946,10 @@ void NetworkGameSystem::PollIncomingMessages()
             // entity would inherit the previous occupant's equip/health.
             m_pendingEquips.erase(destroy_entity.networkedEntityId);
             m_pendingHealth.erase(destroy_entity.networkedEntityId);
+            // Same reasoning for the diagnostic state: a reused networkedEntityId must not
+            // inherit the previous occupant's last status and go quiet on its own first shot.
+            m_lastThreatStatus.erase(destroy_entity.networkedEntityId);
+            m_lastShootStatus.erase(destroy_entity.networkedEntityId);
         }
         break;
 
