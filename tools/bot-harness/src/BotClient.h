@@ -93,6 +93,15 @@ public:
         m_bleedRate = percentPerSecond;
     }
 
+    // Damage sync: the damage-per-hit the bot claims for its weapon. A real client reads this off
+    // its own weapon stats, so this is exactly the field a modified client would forge — which
+    // makes it the only way to exercise the server's plausibility check. Deliberately accepts
+    // absurd, negative and non-finite values; the harness is the attacker in that test.
+    void SetDamagePerHit(const float damage)
+    {
+        m_damagePerHit = damage;
+    }
+
     // Damage sync: aim yaw+pitch at a fixed world point instead of the pitch oscillation.
     // The oscillation exists to make the upper-body LookAt visible in screenshots; for a damage
     // test it is the opposite of what we want, because a shot at +-40 degrees pitch misses by
@@ -167,6 +176,7 @@ private:
     Vector3 m_aimTarget {};
     bool m_hasAimTarget = false;
     float m_bleedRate = 0.0f;      // percent per second, 0 = don't report health at all
+    float m_damagePerHit = 20.0f;  // claimed weapon damage; a plausible rifle value by default
     float m_health = 100.0f;
     float m_healthReportTimer = 0.0f;
     float m_equipDelay = 0.0f;   // seconds after Running before the equip is sent

@@ -219,15 +219,45 @@ public class PlayerPacketHandler
             ItemIdWeapon = content.itemIdWeapon,
             StartPoint = content.startPoint,
             Charge = content.charge,
-            // Relayed unmodified: the server has no weapon stats of its own to check against.
-            // Server-side plausibility (a cap per weapon class) is the natural place to add
-            // anti-cheat later and fits on this field without a protocol change.
-            DamagePerHit = content.damagePerHit
+            DamagePerHit = SanitiseDamage(content.damagePerHit, connectionId, server.Config.Combat.MaxDamagePerHit)
         };
         foreach (var trackingConnectionId in _tracker!.GetPlayersTracking(senderEntity.NetworkedEntityId))
         {
             server.EnqueueMessage(EMessageTypeClientbound.EntityShoot, trackingConnectionId, channelId, shot);
         }
+    }
+
+    /// <summary>
+    /// Bring a client-reported weapon damage into a range the victim's pipeline can survive.
+    ///
+    /// Clamping rather than dropping the shot: a dropped shot is a shot the shooter saw fire and
+    /// the victim never received, which desynchronises the two clients — worse for everyone than
+    /// a shot that lands for a capped amount. The violation is logged either way, so an operator
+    /// can act on the player rather than the packet.
+    ///
+    /// NaN and infinity are not paranoia. They travel through the wire as ordinary floats, and on
+    /// the victim's side the number goes straight into the damage pipeline, where a NaN
+    /// propagates into the health pool and cannot be recovered by taking further damage or
+    /// healing. Negative damage would heal the victim instead of hurting them.
+    /// </summary>
+    private float SanitiseDamage(float reported, uint connectionId, float max)
+    {
+        if (!float.IsFinite(reported) || reported < 0.0f)
+        {
+            Logger.Warn($"Connection {connectionId} reported a non-finite or negative damagePerHit " +
+                        $"({reported}) — treating the shot as harmless");
+            return 0.0f;
+        }
+
+        if (reported > max)
+        {
+            Logger.Warn($"Connection {connectionId} reported damagePerHit {reported}, above the " +
+                        $"configured maximum {max} — capping. Repeated hits from one player are " +
+                        $"worth investigating; a legitimate client cannot exceed its weapon's stats.");
+            return max;
+        }
+
+        return reported;
     }
 
     private void HandleHealthUpdate(GameServer server, EMessageTypeServerbound messageType, byte channelId,

@@ -24,11 +24,31 @@ public class InterestConfig
     ];
 }
 
+public class CombatConfig
+{
+    /// <summary>
+    /// Upper bound for the damage-per-hit a client may claim for its own weapon.
+    ///
+    /// The shooter reports this number because only its machine has the weapon's rolled stats
+    /// (see PlayerShoot.damagePerHit) — which means a modified client can claim anything. This
+    /// cap is the floor of the defence, not the ceiling: it stops "one shot, 99999 damage" but
+    /// not a pistol claiming a sniper's damage. A real per-weapon-class limit needs a mapping
+    /// from itemIdWeapon to weapon class, which the server does not have and which would have
+    /// to be generated from TweakDB — a separate piece of work.
+    ///
+    /// The default is deliberately generous. A cap set below what a legitimate high-end weapon
+    /// rolls would silently weaken honest players, which is worse than letting a cheat through:
+    /// the cheat is visible in the log, the nerf is not.
+    /// </summary>
+    public float MaxDamagePerHit { get; set; } = 1000.0f;
+}
+
 public class ServerConfig
 {
     private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
     public InterestConfig Interest { get; set; } = new();
+    public CombatConfig Combat { get; set; } = new();
 
     public static ServerConfig Load(string path)
     {
@@ -75,6 +95,12 @@ public class ServerConfig
         {
             Logger.Warn("Invalid falloff tiers (need ascending maxDistance, divisor >= 1) — using defaults");
             config.Interest.Falloff = InterestConfig.DefaultFalloff();
+        }
+
+        if (!float.IsFinite(config.Combat.MaxDamagePerHit) || config.Combat.MaxDamagePerHit <= 0)
+        {
+            Logger.Warn("Invalid combat.maxDamagePerHit (need a finite value > 0) — using default");
+            config.Combat = new CombatConfig();
         }
 
         return config;

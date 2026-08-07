@@ -39,6 +39,7 @@ struct Options
     float shootEvery = 0.0f;  // seconds between PlayerShoot per bot; 0 = never (needs --weapon)
     float equipDelay = 0.0f;  // seconds after join before drawing the weapon; 0 = immediately
     float bleedRate = 0.0f;   // percent health lost per second; 0 = don't report health at all
+    float damagePerHit = 20.0f;  // claimed weapon damage per shot; forge it to test the server cap
     Vector3 aimTarget {};     // world point every bot aims at (yaw+pitch), instead of oscillating
     bool hasAimTarget = false;
 };
@@ -169,6 +170,12 @@ bool ParseArgs(const int argc, char** argv, Options& options)
             }
             options.hasAimTarget = true;
         }
+        else if (arg == "--damage")
+        {
+            const auto value = next();
+            if (!value) return false;
+            options.damagePerHit = static_cast<float>(std::atof(value));
+        }
         else if (arg == "--bleed")
         {
             const auto value = next();
@@ -189,6 +196,7 @@ bool ParseArgs(const int argc, char** argv, Options& options)
                          "                   [--jump-every <seconds>] [--distance <m, boundary pattern>]\n"
                          "                   [--weapon <tdbid-u64 | record name, e.g. Items.Preset_Ajax_Default>]\n"
                          "                   [--shoot-every <seconds, needs --weapon>] [--equip-delay <seconds>]\n"
+                         "                   [--damage <claimed damage per hit, default 20; forge it to test the server cap>]\n"
                          "                   [--bleed <percent per second, exercises the health pipeline>]\n"
                          "                   [--aim-at x,y,z  aim yaw+pitch at a world point instead of oscillating]\n");
             return false;
@@ -260,6 +268,7 @@ int main(const int argc, char** argv)
                                                Behavior(options.pattern, options.center, i, options.boundaryDistance));
         bot->SetWeapon(options.weaponTdbid, options.equipDelay);
         bot->SetBleedRate(options.bleedRate);
+        bot->SetDamagePerHit(options.damagePerHit);
         if (options.hasAimTarget)
         {
             bot->SetAimTarget(options.aimTarget);

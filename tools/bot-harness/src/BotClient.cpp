@@ -240,7 +240,14 @@ void BotClient::HandleMessage(const void* data, const size_t size)
             std::fprintf(stderr, "[%s] faulty packet: EntityShoot\n", m_name.c_str());
             return;
         }
-        // counted, not logged — a shooting crowd would flood the console
+        // Counted, not logged — a shooting crowd would flood the console. The exception is the
+        // first shot: its damage number is what the server's plausibility check is supposed to
+        // have bounded, and without seeing the value that arrives, "the cap works" rests on
+        // reading the server's code rather than on evidence.
+        if (m_shotsReceived == 0)
+        {
+            std::printf("[%s] first peer shot: damagePerHit %.2f\n", m_name.c_str(), shot.damagePerHit);
+        }
         m_shotsReceived++;
     }
     break;
@@ -378,9 +385,10 @@ void BotClient::SendShoot()
     shoot.startPoint = m_lastPose.position;
     shoot.charge = 1.0f;
     // A real client reads this off its own weapon; a bot has none, so it reports a plausible
-    // rifle value. Non-zero on purpose: zero is exactly what a missing damage number looks like,
-    // and the whole point of the bot is to exercise the path a real shooter takes.
-    shoot.damagePerHit = 20.0f;
+    // rifle value by default. Non-zero on purpose: zero is exactly what a missing damage number
+    // looks like, and the whole point of the bot is to exercise the path a real shooter takes.
+    // Overridable via --damage, which is how the server's plausibility check gets tested.
+    shoot.damagePerHit = m_damagePerHit;
     Send(shoot);
 }
 
