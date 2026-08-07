@@ -190,36 +190,15 @@ public class ChoomLinkPlayerHealthListener extends ScriptStatPoolsListener {
     }
 
     public func OnStatPoolValueChanged(oldValue: Float, newValue: Float, percToPoints: Float) -> Void {
-        // Respawn statt Todesmenue (choomlink-2hum). Ohne das endet ein Tod im
-        // Einzelspieler-Bildschirm "FLATLINED / LOAD LAST CHECKPOINT" — in-game belegt
-        // 2026-08-03 — und wirft den Spieler damit aus der Sitzung.
-        //
-        // Der engine-native Weg ist die Wiederbelebung des Spiels selbst: liegt
-        // BaseStatusEffect.SecondHeart an, laesst SetIsResurrectionAllowedBasedOnState die
-        // Wiederbelebung zu und setzt das Todesmenue-Blackboard gar nicht erst
-        // (highLevelTransitions.script:169-187). Die Zustandsmaschine geht dann durch
-        // ResurrectEvents, und PlayerPuppet.OnResurrected ist bereits mehrspielerbewusst — es
-        // belebt bei IsMultiplayer mit 20 % statt 100 % wieder (player.script:5177-5190).
-        //
-        // Der Effekt muss VOR dem Tod anliegen, weil die Pruefung in DeathEvents.OnEnter
-        // laeuft. Deshalb hier an einer Schwelle statt beim Tod selbst.
-        //
-        // DESIGNENTSCHEIDUNG, bewusst minimal gehalten: Wiederbelebung an Ort und Stelle.
-        // Ein Spawnpunkt-System gibt es im Spiel nicht (recherchiert), das waere ein eigenes
-        // Vorhaben — ebenso die Frage, ob ein Respawn Verzoegerung oder Kosten haben soll.
-        if newValue <= 15.0 && newValue > 0.0 && IsDefined(this.m_player) {
-            if !StatusEffectSystem.ObjectHasStatusEffect(this.m_player, t"BaseStatusEffect.SecondHeart") {
-                StatusEffectHelper.ApplyStatusEffect(this.m_player, t"BaseStatusEffect.SecondHeart");
-            }
-        }
-
         if this.m_hasReported && AbsF(newValue - this.m_lastReported) < 0.5 && newValue > 0.0 {
             return;
         }
         this.m_lastReported = newValue;
         this.m_hasReported = true;
-        let isDead = newValue <= 0.0;
-        GameInstance.GetNetworkGameSystem().playerActionTracker.OnPlayerHealthChanged(newValue, isDead);
+        // Der Tod wird NICHT mehr aus dieser Zahl abgeleitet: mit aktivem Zweitherz klemmt
+        // die Engine die Gesundheit bei 1 % fest (statPoolsManager.script:309-314), der Wert
+        // erreicht also nie 0. Die Todesmeldung haengt jetzt an DeathEvents.OnEnter.
+        GameInstance.GetNetworkGameSystem().playerActionTracker.OnPlayerHealthChanged(newValue, false);
     }
 }
 
@@ -234,7 +213,93 @@ protected cb func OnGameAttached() -> Bool {
     this.choomlink_healthListener = listener;
     GameInstance.GetStatPoolsSystem(this.GetGame())
         .RequestRegisteringListener(Cast<StatsObjectID>(this.GetEntityID()), gamedataStatPoolType.Health, listener);
+    ChoomLinkRespawn.GrantSecondHeart(this);
     return result;
+}
+
+// Respawn statt Todesmenue (choomlink-2hum). Ohne das endet ein Tod im Einzelspieler-
+// Bildschirm "FLATLINED / LOAD LAST CHECKPOINT" — in-game belegt 2026-08-03 — und wirft den
+// Spieler aus der Sitzung.
+//
+// Das Spiel bringt den Mechanismus selbst mit: das Zweitherz-Cyberware. Entscheidend ist dabei
+// der STAT gamedataStatType.HasSecondHeart, nicht der gleichnamige Statuseffekt — eine
+// Verwechslung, die den ersten Anlauf lahmlegte. Die Kette in Vanilla:
+//
+//   HasSecondHeart > 0
+//     -> SecondHeartStatListener schaltet God-Mode Immortal ein
+//        (playerListeners.script:557-570)
+//     -> Immortal klemmt die Gesundheit bei 1 % fest (statPoolsManager.script:309-314)
+//     -> DeathDecisions loest den Tod stattdessen bei <= 1,10 % aus
+//        (highLevelTransitions.script:505-509)
+//     -> SetIsResurrectionAllowedBasedOnState erlaubt die Wiederbelebung und setzt das
+//        Todesmenue-Blackboard gar nicht erst (:169-183)
+//     -> ResurrectEvents.OnEnter legt BaseStatusEffect.SecondHeart als ABKLINGZEIT an (:598),
+//        ResurrectDecisions wartet auf deren Ablauf (:583)
+//     -> PlayerPuppet.OnResurrected ist bereits mehrspielerbewusst: 20 % statt 100 %
+//        bei IsMultiplayer (player.script:5177-5190)
+//
+// CDPR hat den PvP-Respawn also selbst vorgesehen; wir muessen nur den Stat setzen.
+//
+// DESIGNENTSCHEIDUNG, bewusst minimal gehalten: Wiederbelebung an Ort und Stelle. Ein
+// Spawnpunkt-System gibt es im Spiel nicht (recherchiert), das waere ein eigenes Vorhaben —
+// ebenso die Frage, ob ein Respawn Verzoegerung oder Kosten haben soll.
+public class ChoomLinkRespawn {
+    public static func GrantSecondHeart(player: ref<PlayerPuppet>) -> Void {
+        let stats = GameInstance.GetStatsSystem(player.GetGame());
+        let objId = Cast<StatsObjectID>(player.GetEntityID());
+        if stats.GetStatValue(objId, gamedataStatType.HasSecondHeart) <= 0.0 {
+            stats.AddModifier(objId, RPGManager.CreateStatModifier(
+                gamedataStatType.HasSecondHeart, gameStatModifierType.Additive, 1.0));
+        }
+        // Gemessen statt angenommen: ob der Stat wirklich anliegt, entscheidet ueber den
+        // gesamten Respawn-Pfad, und ein Modifier auf einem berechneten Stat koennte
+        // wirkungslos verpuffen. 20 = Stat-Wert nach dem Setzen.
+        GameInstance.GetNetworkGameSystem().playerActionTracker
+            .LogDiag(20, stats.GetStatValue(objId, gamedataStatType.HasSecondHeart));
+    }
+}
+
+// Todesmeldung. Sitzt am Zustandsautomaten statt an der Gesundheitszahl, weil die mit
+// Zweitherz nie 0 erreicht. 21 = Tod betreten.
+@wrapMethod(DeathEvents)
+protected func OnEnter(stateContext: ref<StateContext>, scriptInterface: ref<StateGameScriptInterface>) -> Void {
+    let tracker = GameInstance.GetNetworkGameSystem().playerActionTracker;
+    // 21 = Tod betreten, als Wert der Zweitherz-Stat in diesem Moment. Nicht konstant 1.0:
+    // genau dieser Wert entscheidet, ob eine Wiederbelebung folgt oder das Todesmenue kommt,
+    // und beim zweiten Tod innerhalb weniger Sekunden kam am 2026-08-07 das Menue.
+    tracker.LogDiag(21, GameInstance.GetStatsSystem(scriptInterface.owner.GetGame())
+        .GetStatValue(Cast<StatsObjectID>(scriptInterface.ownerEntityID), gamedataStatType.HasSecondHeart));
+    tracker.OnPlayerHealthChanged(0.0, true);
+    wrappedMethod(stateContext, scriptInterface);
+}
+
+// Respawn-Meldung. 22 = Wiederbelebung durchlaufen, mit der Gesundheit danach als Wert —
+// das ist der Beleg, dass statt des Todesmenues die Wiederbelebung kam.
+@wrapMethod(PlayerPuppet)
+protected func OnResurrected() -> Void {
+    wrappedMethod();
+    let health = GameInstance.GetStatPoolsSystem(this.GetGame())
+        .GetStatPoolValue(Cast<StatsObjectID>(this.GetEntityID()), gamedataStatPoolType.Health, true);
+    GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(22, health);
+
+    // Abklingzeit abraeumen. ResurrectEvents.OnEnter legt BaseStatusEffect.SecondHeart als
+    // Sperre an (highLevelTransitions.script:598) — im Vanilla-Spiel darf das Zweitherz nur
+    // einmal pro Abklingzeit retten. Auf einem PvP-Server ist das untragbar: am 2026-08-07
+    // fuehrte der zweite Tod sechs Sekunden nach dem ersten wieder ins FLATLINED-Menue und
+    // damit aus der Sitzung.
+    //
+    // Hier ist das Aufraeumen sicher: OnResurrected haengt an ResurrectEvents.OnExit, der
+    // Zustand ist also bereits verlassen und ResurrectDecisions.ToExploration (:583) liest
+    // die Restdauer nicht mehr.
+    //
+    // 23 = Zweitherz-Stat nach dem Abraeumen. Wieder gemessen statt angenommen: liegt der
+    // Wert hier bei 0, sperrt nicht die Abklingzeit selbst, sondern ein Modifikator auf dem
+    // Stat — dann muesste die Sperre woanders geloest werden.
+    StatusEffectHelper.RemoveStatusEffect(this, t"BaseStatusEffect.SecondHeart");
+    GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(23,
+        GameInstance.GetStatsSystem(this.GetGame())
+            .GetStatValue(Cast<StatsObjectID>(this.GetEntityID()), gamedataStatType.HasSecondHeart));
+    GameInstance.GetNetworkGameSystem().playerActionTracker.OnPlayerHealthChanged(health, false);
 }
 
 @wrapMethod(PlayerPuppet)
