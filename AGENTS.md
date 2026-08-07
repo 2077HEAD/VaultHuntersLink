@@ -42,6 +42,7 @@ Use the scripts in `tools\dist` — they wrap the MSVC/vcpkg setup that CMake ca
 Two traps worth knowing:
 
 - **Running the server needs `$env:DOTNET_ROLL_FORWARD='LatestMajor'`** — it targets net9.0 and only runtimes 8 and 10 are installed.
+- Server config is optional: `config.json` next to the managed output (`server\Managed\bin\Debug\net9.0\`). Absent, the defaults apply and the server says so on startup. It holds the interest-management radii and `combat.maxDamagePerHit`, the cap on the damage a client may claim for its own weapon.
 - **Never wrap these scripts in `2>&1` from PowerShell 5.1.** VsDevCmd emits a harmless `vswhere.exe` line on stderr; the redirect turns it into an ErrorRecord and aborts the script although the compiler succeeded.
 
 Underlying toolchain: CMake + Ninja + MSVC (VS 2022 Build Tools) + standalone vcpkg at `C:\Users\G4M3R\Programming\vcpkg` (`VCPKG_ROOT`). GNS comes from vcpkg (manifest mode; `builtin-baseline` added in our fork — candidate upstream PR).
