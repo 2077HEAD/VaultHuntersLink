@@ -94,6 +94,7 @@ struct EntityShoot {
     Vector3 startPoint;
     float charge;
     float damagePerHit; // see PlayerShoot::damagePerHit
+    Vector3 aimPoint;   // see PlayerShoot::aimPoint — world-space aim point, zero = none
 
     inline static void FillMessageFrame(MessageFrame& frame)
     {

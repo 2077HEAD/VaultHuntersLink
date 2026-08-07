@@ -872,8 +872,11 @@ void NetworkGameSystem::PollIncomingMessages()
                                 entity_shoot.itemIdWeapon);
             const auto& shooterMoveState = m_movementState[shooterEntityId];
             int32_t shootStatus = -1;
+            // The aim point is passed as a Vector4 with w=1 so redscript sees a position rather
+            // than a direction; w=0 there is the convention for a vector.
+            RED4ext::Vector4 aimPoint{entity_shoot.aimPoint.x, entity_shoot.aimPoint.y, entity_shoot.aimPoint.z, 1.0f};
             Red::CallVirtual(this, "ApplyShootOnPuppet", shootStatus, shooter.value(), shooterMoveState.targetYaw,
-                             shooterMoveState.targetPitch, entity_shoot.charge, entity_shoot.damagePerHit);
+                             shooterMoveState.targetPitch, entity_shoot.charge, entity_shoot.damagePerHit, aimPoint);
             if (const auto seen = m_lastShootStatus.find(entity_shoot.networkedEntityId);
                 seen == m_lastShootStatus.end() || seen->second != shootStatus)
             {

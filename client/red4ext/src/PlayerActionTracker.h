@@ -21,7 +21,8 @@ public:
     void OnShoot(RED4ext::Handle<RED4ext::gameprojectileShootEvent> event);
     /// Called from the player PSM's ShootEvents.OnEnter wrap — the only path that covers
     /// hitscan weapons (BaseProjectile.OnShoot never fires for them, choomlink-77e8).
-    void OnPlayerShoot(RED4ext::ItemID item, RED4ext::Vector4 startPoint, float damagePerHit);
+    void OnPlayerShoot(RED4ext::ItemID item, RED4ext::Vector4 startPoint, float damagePerHit,
+                       RED4ext::Vector4 aimPoint);
     void OnHit(RED4ext::Handle<RED4ext::GameObject> gameObject, RED4ext::Handle<RED4ext::gameHitEvent> event);
     void OnMounting(RED4ext::Handle<RED4ext::game::mounting::MountingEvent> event);
     void OnUnmounting(RED4ext::Handle<RED4ext::game::mounting::UnmountingEvent> event);

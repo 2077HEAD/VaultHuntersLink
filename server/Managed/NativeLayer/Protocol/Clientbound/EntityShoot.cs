@@ -12,6 +12,8 @@ public struct EntityShoot : IClientBoundPacket
     public float Charge;
     /// <summary>Weapon damage per hit as reported by the shooter — see PlayerShoot.damagePerHit.</summary>
     public float DamagePerHit;
+    /// <summary>World-space aim point as reported by the shooter — see PlayerShoot.aimPoint.</summary>
+    public Vector3 AimPoint;
 
     public EMessageTypeClientbound GetMessageType()
     {

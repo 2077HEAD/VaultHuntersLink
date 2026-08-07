@@ -338,7 +338,7 @@ public native class NetworkGameSystem extends IGameSystem {
     //   2 = fired WITHOUT any ranged attack -> the projectile carries no damage payload
     //   3 = no weapon in the slot   4 = not a puppet   5 = weapon not attached
     public func ApplyShootOnPuppet(entity: ref<Entity>, yaw: Float, pitch: Float, charge: Float,
-                                   damagePerHit: Float) -> Int32 {
+                                   damagePerHit: Float, aimPoint: Vector4) -> Int32 {
         let puppet = entity as ScriptedPuppet;
         if !IsDefined(puppet) {
             return 4;
@@ -358,7 +358,20 @@ public native class NetworkGameSystem extends IGameSystem {
         // beim Treffer von hier ab.
         puppet.choomlink_lastShotDamage = damagePerHit;
 
-        let target = this.AimTargetFor(puppet, yaw, pitch, 50.0);
+        // Den vom Schuetzen gemeldeten Zielpunkt bevorzugen. Die Rekonstruktion aus yaw/pitch
+        // daneben ist eine Naeherung, die systematisch danebengeht: der Punkt entsteht aus der
+        // Koerpermitte des Puppets, die Kugel verlaesst aber die Muendung daneben, und die
+        // Verbindung Muendung -> Fernpunkt laeuft damit parallel versetzt zur gemeinten Linie.
+        // Rund 23 cm seitlich auf 3,7 m — gemeldet am 2026-08-07 als "manche Schuesse treffen,
+        // manche nicht". Eine Richtung laesst sich nicht in einen Strahl zurueckverwandeln,
+        // solange der Ursprung ein anderer ist; deshalb kommt der Punkt jetzt mit.
+        //
+        // Der Rueckfall bleibt fuer Schuetzen ohne Zielpunkt (Bots aelterer Staende, oder ein
+        // Schuss ins Leere, bei dem der Strahl nichts trifft).
+        let target = aimPoint;
+        if Vector4.IsZero(aimPoint) {
+            target = this.AimTargetFor(puppet, yaw, pitch, 50.0);
+        }
 
         // Why no `target` argument (7th) even though we have the local player right here:
         //

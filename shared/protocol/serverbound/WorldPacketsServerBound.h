@@ -109,6 +109,20 @@ struct PlayerShoot {
     // the puppet's weapon reports 0. The victim still runs its own armour and resistance math
     // on this number, so authority over the victim's health stays local.
     float damagePerHit;
+    // Where the shot is aimed, in world space -- NOT a direction (aim-point relay, 2026-08-07).
+    //
+    // Relaying yaw/pitch and rebuilding a point from them cannot work, and the reason is
+    // geometric rather than a tuning problem: the observer reconstructed the point as
+    // `puppet position + direction * 50 m`, but the projectile leaves the MUZZLE, which sits
+    // beside the body. Firing from the muzzle at a point derived from the body centre yields a
+    // line parallel to the intended one, displaced by the muzzle offset -- about 23 cm sideways
+    // at 3.7 m range. The user saw exactly that: "trifft leicht seitlich, manche Schuesse
+    // treffen, manche nicht". A direction can never be turned back into the original ray while
+    // the origin differs; moving the reference point only relocates the error.
+    //
+    // Zero means "no aim point available"; the observer then falls back to the old
+    // direction-derived point rather than shooting at the world origin.
+    Vector3 aimPoint;
 
     inline static void FillMessageFrame(MessageFrame& frame)
     {

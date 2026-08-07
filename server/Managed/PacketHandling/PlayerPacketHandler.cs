@@ -219,7 +219,11 @@ public class PlayerPacketHandler
             ItemIdWeapon = content.itemIdWeapon,
             StartPoint = content.startPoint,
             Charge = content.charge,
-            DamagePerHit = SanitiseDamage(content.damagePerHit, connectionId, server.Config.Combat.MaxDamagePerHit)
+            DamagePerHit = SanitiseDamage(content.damagePerHit, connectionId, server.Config.Combat.MaxDamagePerHit),
+            // Relayed unmodified: the server holds no world geometry to validate an aim point
+            // against. Line-of-sight and range checks would need one, and that is a separate
+            // piece of work from the damage cap next to it.
+            AimPoint = content.aimPoint
         };
         foreach (var trackingConnectionId in _tracker!.GetPlayersTracking(senderEntity.NetworkedEntityId))
         {

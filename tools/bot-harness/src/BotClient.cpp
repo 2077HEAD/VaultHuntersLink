@@ -389,6 +389,14 @@ void BotClient::SendShoot()
     // looks like, and the whole point of the bot is to exercise the path a real shooter takes.
     // Overridable via --damage, which is how the server's plausibility check gets tested.
     shoot.damagePerHit = m_damagePerHit;
+    // Mit --aim-at kennt der Bot den Zielpunkt exakt und schickt ihn mit — damit ist er das
+    // praezisere Messinstrument als ein echter Spieler, dessen Zielpunkt aus GetLookAtObject
+    // stammt. Ohne --aim-at bleibt der Punkt null und der Empfaenger faellt auf die
+    // Richtungsnaeherung zurueck, so wie bei einem Schuss ins Leere.
+    if (m_hasAimTarget)
+    {
+        shoot.aimPoint = m_aimTarget;
+    }
     Send(shoot);
 }
 

@@ -154,8 +154,27 @@ protected final func OnEnter(stateContext: ref<StateContext>, scriptInterface: r
         let stats = GameInstance.GetStatsSystem(weapon.GetGame());
         let dmg = stats.GetStatValue(Cast<StatsObjectID>(weapon.GetEntityID()),
                                      gamedataStatType.EffectiveDamagePerHit);
+        // Zielpunkt mitschicken statt nur der Blickrichtung (2026-08-07). Beim Empfaenger wurde
+        // der Punkt bisher als "Koerpermitte des Puppets + Richtung * 50 m" rekonstruiert; die
+        // Kugel verlaesst aber die Muendung daneben, sodass die Schusslinie parallel versetzt
+        // lief — rund 23 cm seitlich auf 3,7 m. Eine Richtung laesst sich nicht in den
+        // urspruenglichen Strahl zurueckverwandeln, solange der Ursprung ein anderer ist.
+        //
+        // GetLookAtObject ist die Auswahl, die das Spiel selbst fuer den Spieler trifft
+        // (gameObject.script:2324 nutzt sie genauso). Trifft der Blick nichts, bleibt der Punkt
+        // null und der Empfaenger faellt auf die alte Naeherung zurueck — fuer PvP ist der
+        // interessante Fall ohnehin der, in dem jemand auf einen Mitspieler zielt.
+        let aimPoint: Vector4;
+        let lookedAt = GameInstance.GetTargetingSystem(weapon.GetGame())
+            .GetLookAtObject(scriptInterface.executionOwner, true, true);
+        if IsDefined(lookedAt) {
+            aimPoint = lookedAt.GetWorldPosition();
+            // Fusspunkt anheben: GetWorldPosition eines Puppets liegt am Boden, ein Schuss
+            // dorthin geht unter dem Ziel durch.
+            aimPoint.Z += 1.0;
+        }
         GameInstance.GetNetworkGameSystem().playerActionTracker
-            .OnPlayerShoot(weapon.GetItemID(), scriptInterface.executionOwner.GetWorldPosition(), dmg);
+            .OnPlayerShoot(weapon.GetItemID(), scriptInterface.executionOwner.GetWorldPosition(), dmg, aimPoint);
     }
 }
 
