@@ -338,7 +338,7 @@ int main(const int argc, char** argv)
             statsAccumulator = 0.0f;
 
             int running = 0, dead = 0;
-            uint64_t teleports = 0, actions = 0, spawns = 0, despawns = 0, equips = 0, shots = 0, healths = 0;
+            uint64_t teleports = 0, actions = 0, spawns = 0, despawns = 0, equips = 0, shots = 0, healths = 0, hitConfirms = 0;
             for (const auto& bot : bots)
             {
                 if (bot->GetState() == BotClient::State::Running) running++;
@@ -350,12 +350,14 @@ int main(const int argc, char** argv)
                 equips += bot->ConsumeEquipCount();
                 shots += bot->ConsumeShotCount();
                 healths += bot->ConsumeHealthCount();
+                hitConfirms += bot->ConsumeHitConfirmCount();
             }
-            std::printf("stats: %d/%zu running, %d dead, %llu teleports, %llu actions, %llu spawns, %llu despawns, %llu equips, %llu shots, %llu health received/s\n",
+            std::printf("stats: %d/%zu running, %d dead, %llu teleports, %llu actions, %llu spawns, %llu despawns, %llu equips, %llu shots, %llu health received/s, %llu hit confirms\n",
                         running, bots.size(), dead, static_cast<unsigned long long>(teleports),
                         static_cast<unsigned long long>(actions), static_cast<unsigned long long>(spawns),
                         static_cast<unsigned long long>(despawns), static_cast<unsigned long long>(equips),
-                        static_cast<unsigned long long>(shots), static_cast<unsigned long long>(healths));
+                        static_cast<unsigned long long>(shots), static_cast<unsigned long long>(healths),
+                        static_cast<unsigned long long>(hitConfirms));
 
             if (dead == static_cast<int>(bots.size()))
             {

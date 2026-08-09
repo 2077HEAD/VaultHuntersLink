@@ -283,6 +283,21 @@ void BotClient::HandleMessage(const void* data, const size_t size)
     }
     break;
 
+    case eEntityHitConfirmed:
+    {
+        EntityHitConfirmed confirmed = {};
+        if (zpp::bits::failure(in(confirmed)))
+        {
+            std::fprintf(stderr, "[%s] faulty packet: EntityHitConfirmed\n", m_name.c_str());
+            return;
+        }
+        m_hitConfirmsReceived++;
+        std::printf("[%s] hit confirmed: victim %llu dmg %.1f headshot=%d dead=%d\n", m_name.c_str(),
+                    static_cast<unsigned long long>(confirmed.victimNetworkedEntityId), confirmed.damageDealt,
+                    confirmed.isHeadshot ? 1 : 0, confirmed.isDead ? 1 : 0);
+    }
+    break;
+
     default:
         break;
     }

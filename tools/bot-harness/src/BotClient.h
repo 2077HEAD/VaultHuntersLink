@@ -84,6 +84,12 @@ public:
         m_healthUpdatesReceived = 0;
         return count;
     }
+    uint64_t ConsumeHitConfirmCount()
+    {
+        const auto count = m_hitConfirmsReceived;
+        m_hitConfirmsReceived = 0;
+        return count;
+    }
 
     // Damage sync: bots "bleed" from full to empty and back, purely to exercise the health
     // pipeline (report -> server state -> relay -> track-start snapshot) without a running game.
@@ -172,6 +178,7 @@ private:
     uint64_t m_equipsReceived = 0;
     uint64_t m_shotsReceived = 0;
     uint64_t m_healthUpdatesReceived = 0;
+    uint64_t m_hitConfirmsReceived = 0;
     uint64_t m_weaponTdbid = 0;
     Vector3 m_aimTarget {};
     bool m_hasAimTarget = false;
