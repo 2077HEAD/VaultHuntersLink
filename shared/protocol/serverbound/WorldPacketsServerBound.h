@@ -130,3 +130,20 @@ struct PlayerShoot {
         frame.channel_id = 0; // TODO
     }
 };
+
+// Sent by the VICTIM after DamageSystem.Process finishes computing the real, post-armor
+// damage of a hit landed by one of our relayed shots (hit-feedback design, 2026-08-08).
+// The shooter's own client never runs the damage pipeline for its own shot (victim-
+// authoritative model, choomlink-2hum) -- this is the only way it learns the shot connected.
+struct PlayerWasHit {
+    uint64_t shooterNetworkedEntityId;
+    float damageDealt;  // points, not percent -- a percent number is meaningless on a HUD
+    bool isHeadshot;
+    bool isDead;
+
+    inline static void FillMessageFrame(MessageFrame& frame)
+    {
+        frame.message_type = ePlayerWasHit;
+        frame.channel_id = 0;
+    }
+};

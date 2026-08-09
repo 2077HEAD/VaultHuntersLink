@@ -23,6 +23,7 @@ public class PlayerPacketHandler
     private readonly TypedPacketHandler<PlayerShoot> _playerShootHandler;
     private readonly TypedPacketHandler<PlayerActionTracked> _playerActionHandler;
     private readonly TypedPacketHandler<PlayerHealthUpdate> _playerHealthHandler;
+    private readonly TypedPacketHandler<PlayerWasHit> _playerWasHitHandler;
     private EntityTracker? _tracker = null;
     private PlayerService? _players = null;
 
@@ -36,6 +37,7 @@ public class PlayerPacketHandler
         _playerShootHandler = new TypedPacketHandler<PlayerShoot>(HandleShoot);
         _playerActionHandler = new TypedPacketHandler<PlayerActionTracked>(HandleActionTracked);
         _playerHealthHandler = new TypedPacketHandler<PlayerHealthUpdate>(HandleHealthUpdate);
+        _playerWasHitHandler = new TypedPacketHandler<PlayerWasHit>(HandlePlayerWasHit);
     }
 
     protected void HandleJoinWorld(GameServer server, EMessageTypeServerbound messageType, byte channelId, uint connectionId, PlayerJoinWorld content)
@@ -300,6 +302,40 @@ public class PlayerPacketHandler
         }
     }
 
+    /// <summary>
+    /// Delivers a hit confirmation to EXACTLY the shooter's connection, not a tracker broadcast
+    /// (hit-feedback design §4) — this is a point-to-point notification, not world state.
+    /// </summary>
+    private void HandlePlayerWasHit(GameServer server, EMessageTypeServerbound messageType, byte channelId,
+        uint connectionId, PlayerWasHit content)
+    {
+        if (!server.EntityService.SpawnedEntities.TryGetValue(content.shooterNetworkedEntityId, out var shooterEntity))
+        {
+            // The shooter disconnected or despawned between firing and the hit landing. Drop
+            // silently -- same "packet race with spawn/despawn" pattern as HandleShoot.
+            Logger.Warn($"PlayerWasHit referencing unknown shooter entity {content.shooterNetworkedEntityId}, dropping");
+            return;
+        }
+
+        if (!_players!.ConnectedPlayers.TryGetValue(connectionId, out var victim) || victim.PuppetEntity == null)
+        {
+            Logger.Warn($"PlayerWasHit from connection {connectionId} without a puppet, dropping");
+            return;
+        }
+
+        Logger.Info($"Hit confirmed: {victim.Name} was hit for {content.damageDealt:F1} " +
+                    $"(headshot={content.isHeadshot} dead={content.isDead}), notifying shooter connection {shooterEntity.NetworkIdOwner}");
+
+        var confirmed = new EntityHitConfirmed
+        {
+            VictimNetworkedEntityId = victim.PuppetEntity.NetworkedEntityId,
+            DamageDealt = content.damageDealt,
+            IsHeadshot = content.isHeadshot,
+            IsDead = content.isDead
+        };
+        server.EnqueueMessage(EMessageTypeClientbound.EntityHitConfirmed, (uint)shooterEntity.NetworkIdOwner, channelId, confirmed);
+    }
+
     private void HandleActionTracked(GameServer server, EMessageTypeServerbound messageType, byte channelId,
         uint connectionId, PlayerActionTracked content)
     {
@@ -342,5 +378,6 @@ public class PlayerPacketHandler
         server.AddPacketHandler(EMessageTypeServerbound.PlayerShoot, _playerShootHandler.HandlePacket);
         server.AddPacketHandler(EMessageTypeServerbound.PlayerActionTracked, _playerActionHandler.HandlePacket);
         server.AddPacketHandler(EMessageTypeServerbound.PlayerHealthUpdate, _playerHealthHandler.HandlePacket);
+        server.AddPacketHandler(EMessageTypeServerbound.PlayerWasHit, _playerWasHitHandler.HandlePacket);
     }
 }

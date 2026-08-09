@@ -102,3 +102,18 @@ struct EntityShoot {
         frame.channel_id = 1;
     }
 };
+
+// Relays a serverbound PlayerWasHit back to the shooter that landed it — and ONLY to that
+// one connection, not a tracker broadcast (see PlayerPacketHandler.HandlePlayerWasHit).
+struct EntityHitConfirmed {
+    uint64_t victimNetworkedEntityId;
+    float damageDealt;
+    bool isHeadshot;
+    bool isDead;
+
+    inline static void FillMessageFrame(MessageFrame& frame)
+    {
+        frame.message_type = eEntityHitConfirmed;
+        frame.channel_id = 0;
+    }
+};

@@ -12,5 +12,6 @@ enum EMessageTypeServerbound: uint16_t {
     ePlayerUnmountCar = 6,
     ePlayerEquipItem = 7,
     ePlayerShoot = 8,
-    ePlayerHealthUpdate = 9
+    ePlayerHealthUpdate = 9,
+    ePlayerWasHit = 10
 };

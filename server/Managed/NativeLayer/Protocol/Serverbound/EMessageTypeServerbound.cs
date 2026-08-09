@@ -11,5 +11,6 @@ public enum EMessageTypeServerbound: ushort
     PlayerUnmountCar = 6,
     PlayerEquipItem = 7,
     PlayerShoot = 8,
-    PlayerHealthUpdate = 9
+    PlayerHealthUpdate = 9,
+    PlayerWasHit = 10
 }

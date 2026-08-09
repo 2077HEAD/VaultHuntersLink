@@ -10,4 +10,5 @@ public enum EMessageTypeClientbound: ushort
     EntityAction = 5,
     EntityShoot = 6,
     EntityHealth = 7,
+    EntityHitConfirmed = 8,
 }
