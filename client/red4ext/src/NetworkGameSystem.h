@@ -55,6 +55,11 @@ private:
         // SetInputBool calls that make the combat locomotion animset loadable have been sent
         // for this puppet yet (send once — see DriveLocomotionFeed).
         bool animSetupInputsSet = false;
+        // Set once per puppet, the first time we resolve its networkedEntityId to an entity
+        // handle (eTeleportEntity case) -- lets redscript read the puppet's own networkedEntityId
+        // back out (hit-feedback design §5: this mapping does not otherwise exist in redscript,
+        // only forward in m_networkedEntitiesLookup here in C++).
+        bool networkIdSet = false;
         // Virtual point advancing along the network path at `speed`, independent of the
         // puppet's actual position. Teleport commands always target this point, so AI ticks
         // that skip a command don't accumulate lag (the next executed command lands on the
@@ -151,5 +156,6 @@ template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerUnmoun
 template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerEquipItem msg);
 template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerShoot msg);
 template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerHealthUpdate msg);
+template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerWasHit msg);
 
 #endif //NETWORKMANAGERCONTROLLER_H

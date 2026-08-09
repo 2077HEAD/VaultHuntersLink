@@ -32,6 +32,11 @@ public:
     /// deliberately state-driven rather than damage-driven: healing, regeneration and items change
     /// health without any hit ever happening.
     void OnPlayerHealthChanged(float healthPercent, bool isDead);
+    /// Called from the DamageSystem.Process wrap (Cyberverse.reds) after the victim's own
+    /// pipeline finishes computing the real, post-armor damage of a hit from one of our
+    /// relayed shots. The shooter's own client never runs that pipeline for its own shot, so
+    /// this is the only way it learns the shot connected (hit-feedback design, 2026-08-08).
+    void OnPlayerWasHit(uint64_t shooterNetworkedEntityId, float damageDealt, bool isHeadshot, bool isDead);
     /// Generic diagnostic channel for the redscript side. FTLog only reaches the CET console
     /// window, never a file, so anything an automated test has to read must come through here.
     void LogDiag(int32_t code, float value);
@@ -51,6 +56,7 @@ RTTI_DEFINE_CLASS(PlayerActionTracker, {
     RTTI_METHOD(OnItemEquipped);
     RTTI_METHOD(OnItemUnequipped);
     RTTI_METHOD(OnPlayerHealthChanged);
+    RTTI_METHOD(OnPlayerWasHit);
     RTTI_METHOD(LogDiag);
     RTTI_ALIAS("Cyberverse.Network.Managers.PlayerActionTracker");
 });

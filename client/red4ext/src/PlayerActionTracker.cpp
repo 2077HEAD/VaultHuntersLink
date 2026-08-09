@@ -93,6 +93,19 @@ void PlayerActionTracker::OnPlayerHealthChanged(const float healthPercent, const
     Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, health);
 }
 
+void PlayerActionTracker::OnPlayerWasHit(const uint64_t shooterNetworkedEntityId, const float damageDealt,
+                                         const bool isHeadshot, const bool isDead)
+{
+    PlayerWasHit was_hit = {};
+    was_hit.shooterNetworkedEntityId = shooterNetworkedEntityId;
+    was_hit.damageDealt = damageDealt;
+    was_hit.isHeadshot = isHeadshot;
+    was_hit.isDead = isDead;
+    SDK->logger->InfoF(PLUGIN, "diag: local hit taken, shooter %llu dmg %.1f headshot=%d dead=%d",
+                       shooterNetworkedEntityId, damageDealt, isHeadshot ? 1 : 0, isDead ? 1 : 0);
+    Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, was_hit);
+}
+
 void PlayerActionTracker::LogDiag(const int32_t code, const float value)
 {
     SDK->logger->InfoF(PLUGIN, "diag: reds code=%d value=%.2f", code, value);

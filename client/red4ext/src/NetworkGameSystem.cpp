@@ -705,6 +705,12 @@ void NetworkGameSystem::PollIncomingMessages()
             // A per-frame interpolation (UpdatePuppetInterpolation) moves the puppet.
             auto& moveState = m_movementState[entityId];
 
+            if (!moveState.networkIdSet)
+            {
+                moveState.networkIdSet = true;
+                Red::CallVirtual(this, "SetupPuppetNetworkId", entity.value(), teleport.networkedEntityId);
+            }
+
             const auto lagX = teleport.targetPosition.x - positionSource.X;
             const auto lagY = teleport.targetPosition.y - positionSource.Y;
             const auto lagZ = teleport.targetPosition.z - positionSource.Z;
@@ -886,6 +892,39 @@ void NetworkGameSystem::PollIncomingMessages()
                                    "2=NO-attack 3=no-weapon 4=not-a-puppet 5=weapon-not-attached)",
                                    entity_shoot.networkedEntityId, shootStatus);
             }
+        }
+        break;
+
+        case eEntityHitConfirmed:
+        {
+            EntityHitConfirmed hit_confirmed = {};
+            if (zpp::bits::failure(in(hit_confirmed)))
+            {
+                SDK->logger->Error(PLUGIN, "Faulty packet: EntityHitConfirmed");
+                pIncomingMsg->Release();
+                continue;
+            }
+
+            if (!m_networkedEntitiesLookup.contains(hit_confirmed.victimNetworkedEntityId))
+            {
+                // Packet race with spawn/despawn: drop, never crash (spec §5).
+                break;
+            }
+
+            const auto victimEntityId = m_networkedEntitiesLookup[hit_confirmed.victimNetworkedEntityId];
+            const auto victim = Cyberverse::Utils::GetDynamicEntity(victimEntityId);
+            if (!victim.has_value())
+            {
+                break;
+            }
+
+            int32_t applyStatus = -1;
+            Red::CallVirtual(this, "ApplyHitConfirmedOnPuppet", applyStatus, victim.value(),
+                             hit_confirmed.damageDealt, hit_confirmed.isHeadshot, hit_confirmed.isDead);
+            SDK->logger->InfoF(PLUGIN,
+                               "diag: hit confirmed on entity %llu dmg %.1f headshot=%d dead=%d status=%d",
+                               hit_confirmed.victimNetworkedEntityId, hit_confirmed.damageDealt,
+                               hit_confirmed.isHeadshot ? 1 : 0, hit_confirmed.isDead ? 1 : 0, applyStatus);
         }
         break;
 
