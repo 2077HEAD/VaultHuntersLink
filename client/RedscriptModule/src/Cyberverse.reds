@@ -433,6 +433,45 @@ protected cb func OnDamageReceived(evt: ref<gameDamageReceivedEvent>) -> Bool {
     let result = wrappedMethod(evt);
     if this.IsPlayer() {
         GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(12, evt.totalDamageReceived);
+
+        // Hit-feedback (2026-08-08, moved here 2026-08-09): originally measured in the
+        // DamageSystem.Process wrap by snapshotting the Health stat pool before/after
+        // wrappedMethod. That snapshot was silently wrong -- the pool write is not synchronous
+        // with Process returning, so "before" and "after" read the same value and
+        // damageDealt came out <= 0 every single time, despite damage visibly landing (health
+        // dropping in the OnPlayerHealthChanged log the whole time). Exact same class of bug as
+        // the documented "blame the probe" lesson (attackComputed not populated yet at OnHit).
+        //
+        // OnDamageReceived is documented (see the comment on this wrap, above) to fire only
+        // AFTER the damage system has fully processed the hit -- it is "the later point in the
+        // same chain" that code 12 already relies on every session. evt.totalDamageReceived is
+        // the finished, post-armor number; no snapshot needed. evt.hitEvent carries the same
+        // gameHitEvent Process saw, so the instigator/headshot logic below is unchanged.
+        let hitEvent = evt.hitEvent;
+        let instigator = hitEvent.attackData.GetInstigator();
+        let puppet = instigator as ScriptedPuppet;
+        if IsDefined(puppet) && !instigator.IsPlayer() && puppet.choomlink_networkedIdSet
+            && evt.totalDamageReceived > 0.0 {
+            // Not a flag read: vanilla's own headshot detection (damageSystem.script:400,
+            // ProcessLocalizedDamage) returns BEFORE setting hitFlag.Headshot whenever the
+            // instigator is not a player -- and ours never is, from the victim's point of view
+            // (the remote puppet is an NPC). hitFlag.Headshot would simply never be set for any
+            // of our relayed shots. Replicated here instead, from the same hit-shape data
+            // (:414-421), deliberately WITHOUT that player-instigator gate.
+            let isHeadshot = false;
+            let hitShapes: array<HitShapeData> = hitEvent.hitRepresentationResult.hitShapes;
+            if ArraySize(hitShapes) > 0 {
+                let hitUserData = DamageSystemHelper.GetHitShapeUserDataBase(hitShapes[0]);
+                if IsDefined(hitUserData) {
+                    isHeadshot = HitShapeUserDataBase.IsHitReactionZoneHead(hitUserData);
+                }
+            }
+            let statPools = GameInstance.GetStatPoolsSystem(this.GetGame());
+            let isDead = statPools.HasStatPoolValueReachedMin(Cast<StatsObjectID>(this.GetEntityID()),
+                                                              gamedataStatPoolType.Health);
+            GameInstance.GetNetworkGameSystem().playerActionTracker
+                .OnPlayerWasHit(puppet.choomlink_networkedEntityId, evt.totalDamageReceived, isHeadshot, isDead);
+        }
     }
     return result;
 }
@@ -458,55 +497,18 @@ protected cb func OnDamageReceived(evt: ref<gameDamageReceivedEvent>) -> Bool {
 private final func Process(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -> Void {
     let instigator = hitEvent.attackData.GetInstigator();
     let puppet = instigator as ScriptedPuppet;
-    let isOurShot = IsDefined(hitEvent.target) && hitEvent.target.IsPlayer()
+    if IsDefined(hitEvent.target) && hitEvent.target.IsPlayer()
         && IsDefined(puppet) && !instigator.IsPlayer()
         && puppet.choomlink_threatRegistered
         && puppet.choomlink_lastShotDamage > 0.0
-        && IsDefined(hitEvent.attackComputed);
-
-    let statPools: ref<StatPoolsSystem>;
-    let statsId: StatsObjectID;
-    let healthBefore: Float;
-    if isOurShot {
+        && IsDefined(hitEvent.attackComputed) {
         hitEvent.attackData.RemoveFlag(hitFlag.DealNoDamage);
         hitEvent.attackComputed.SetAttackValue(puppet.choomlink_lastShotDamage,
                                                gamedataDamageType.Physical);
         GameInstance.GetNetworkGameSystem().playerActionTracker
             .LogDiag(15, puppet.choomlink_lastShotDamage);
-
-        // Hit-feedback (2026-08-08): measure the REAL, post-armor damage as a points delta —
-        // points, not percent, because a percentage number would be meaningless on the
-        // shooter's HUD.
-        statPools = GameInstance.GetStatPoolsSystem(hitEvent.target.GetGame());
-        statsId = Cast<StatsObjectID>(hitEvent.target.GetEntityID());
-        healthBefore = statPools.GetStatPoolValue(statsId, gamedataStatPoolType.Health, false);
     }
-
     wrappedMethod(hitEvent, cache);
-
-    if isOurShot && puppet.choomlink_networkedIdSet {
-        let healthAfter = statPools.GetStatPoolValue(statsId, gamedataStatPoolType.Health, false);
-        let damageDealt = healthBefore - healthAfter;
-        if damageDealt > 0.0 {
-            // Not a flag read: vanilla's own headshot detection (damageSystem.script:400,
-            // ProcessLocalizedDamage) returns BEFORE setting hitFlag.Headshot whenever the
-            // instigator is not a player -- and ours never is, from the victim's point of view
-            // (the remote puppet is an NPC). hitFlag.Headshot would simply never be set for any
-            // of our relayed shots. Replicated here instead, from the same hit-shape data
-            // (:414-421), deliberately WITHOUT that player-instigator gate.
-            let isHeadshot = false;
-            let hitShapes: array<HitShapeData> = hitEvent.hitRepresentationResult.hitShapes;
-            if ArraySize(hitShapes) > 0 {
-                let hitUserData = DamageSystemHelper.GetHitShapeUserDataBase(hitShapes[0]);
-                if IsDefined(hitUserData) {
-                    isHeadshot = HitShapeUserDataBase.IsHitReactionZoneHead(hitUserData);
-                }
-            }
-            let isDead = healthAfter <= 0.0;
-            GameInstance.GetNetworkGameSystem().playerActionTracker
-                .OnPlayerWasHit(puppet.choomlink_networkedEntityId, damageDealt, isHeadshot, isDead);
-        }
-    }
 }
 
 // Fires when the locomotion state machine actually enters the jump state — unlike the Jump

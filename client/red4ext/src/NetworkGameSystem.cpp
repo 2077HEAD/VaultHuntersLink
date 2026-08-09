@@ -115,6 +115,17 @@ void NetworkGameSystem::OnNetworkUpdate(RED4ext::FrameInfo& frame_info, RED4ext:
     }
 
     PollIncomingMessages();
+
+    // Flush deferred hit-confirm sends -- deliberately AFTER PollIncomingMessages() has fully
+    // returned. See NetworkGameSystem::m_pendingHitConfirms for why a direct send from inside
+    // that call's dispatch (OnDamageReceived, itself reacting to the EntityShoot poll just
+    // above) silently never reached the server.
+    for (const auto& hitConfirm : m_pendingHitConfirms)
+    {
+        EnqueueMessage(0, hitConfirm);
+    }
+    m_pendingHitConfirms.clear();
+
     UpdatePuppetInterpolation(frame_info.deltaTime);
     TrackPlayerPosition(frame_info.deltaTime);
 
@@ -166,14 +177,19 @@ bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, T content)
     auto zpp_result = out(frame);
     if (zpp::bits::failure(zpp_result))
     {
-        // Failed to serialize the frame(!)
+        // This branch used to fail silently -- no log at all (fixed 2026-08-09), so a failure
+        // here was indistinguishable from the call never having happened. The send-error branch
+        // below already logged; this one and the content-serialize one below never did.
+        SDK->logger->ErrorF(PLUGIN, "NetworkGameSystem::EnqueueMessage(%d): frame serialize failed\n",
+                            channel_id);
         return false;
     }
 
     zpp_result = out(content);
     if (zpp::bits::failure(zpp_result))
     {
-        // Failed to serialize the content
+        SDK->logger->ErrorF(PLUGIN, "NetworkGameSystem::EnqueueMessage(%d): content serialize failed\n",
+                            channel_id);
         return false;
     }
 

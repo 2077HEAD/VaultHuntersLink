@@ -103,7 +103,18 @@ void PlayerActionTracker::OnPlayerWasHit(const uint64_t shooterNetworkedEntityId
     was_hit.isDead = isDead;
     SDK->logger->InfoF(PLUGIN, "diag: local hit taken, shooter %llu dmg %.1f headshot=%d dead=%d",
                        shooterNetworkedEntityId, damageDealt, isHeadshot ? 1 : 0, isDead ? 1 : 0);
-    Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, was_hit);
+    // Queued, not sent directly (root-caused 2026-08-09): this function is reached from
+    // OnDamageReceived, a reaction to processing an incoming EntityShoot inside THIS SAME
+    // TICK's PollIncomingMessages(). A direct SendMessageToConnection from here reported full
+    // success at every step (valid GameSystem pointer, successful serialize, k_EResultOK) and
+    // the server never received a single one -- a reentrant-send signature. NetworkGameSystem
+    // flushes this queue right after PollIncomingMessages() returns, same tick, outside its
+    // call stack. See NetworkGameSystem::m_pendingHitConfirms for the full writeup.
+    const auto networkSystem = Red::GetGameSystem<NetworkGameSystem>();
+    if (networkSystem)
+    {
+        networkSystem->QueuePlayerWasHit(was_hit);
+    }
 }
 
 void PlayerActionTracker::LogDiag(const int32_t code, const float value)

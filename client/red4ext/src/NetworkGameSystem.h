@@ -91,6 +91,24 @@ private:
     std::map<uint64_t, int32_t> m_lastThreatStatus;
     std::map<uint64_t, int32_t> m_lastShootStatus;
 
+    // Deferred send queue for PlayerWasHit (hit-feedback, 2026-08-09). Measured: sending
+    // synchronously from PlayerActionTracker::OnPlayerWasHit -- reached from OnDamageReceived,
+    // itself a direct reaction to processing an incoming EntityShoot inside THIS SAME TICK's
+    // PollIncomingMessages() -- reported full success at every step (valid GameSystem pointer,
+    // successful serialize, SendMessageToConnection returning k_EResultOK) and the server never
+    // received a single one, while every other sender -- all triggered from PSM state
+    // transitions or stat-pool listener callbacks, never from inside a receive dispatch -- works
+    // every time. That is a reentrant-send signature: calling SendMessageToConnection while
+    // GameNetworkingSockets is still unwinding its own receive/poll callback for the same
+    // connection. Queue here instead and flush from OnNetworkUpdate, after PollIncomingMessages()
+    // has returned -- same tick, but outside its call stack.
+    std::vector<PlayerWasHit> m_pendingHitConfirms;
+
+public:
+    void QueuePlayerWasHit(const PlayerWasHit& msg) { m_pendingHitConfirms.push_back(msg); }
+
+private:
+
     // Applies one EquipItemEntity to a resolved puppet: redscript TransactionSystem apply +
     // the movement-state bookkeeping (weaponDrawn, aim LookAt teardown on unequip).
     void ApplyEquipPacket(const Red::Handle<Red::Entity>& entity, RED4ext::ent::EntityID entityId,
