@@ -218,7 +218,6 @@ public class ChoomLinkPlayerHealthListener extends ScriptStatPoolsListener {
             let stats = GameInstance.GetStatsSystem(this.m_player.GetGame());
             let objId = Cast<StatsObjectID>(this.m_player.GetEntityID());
             if stats.GetStatValue(objId, gamedataStatType.HasSecondHeart) <= 0.0 {
-                GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(25, newValue);
                 ChoomLinkRespawn.GrantSecondHeart(this.m_player);
             }
         }
@@ -283,12 +282,10 @@ public class ChoomLinkRespawn {
     public static func GrantSecondHeart(player: ref<PlayerPuppet>) -> Void {
         let stats = GameInstance.GetStatsSystem(player.GetGame());
         let objId = Cast<StatsObjectID>(player.GetEntityID());
-        // 26 = Stat VOR unserem Zugriff. Ohne diesen Wert laesst sich nicht unterscheiden,
-        // ob der Stat von uns kommt oder aus einer getragenen Zweitherz-Cyberware — genau
-        // diese Verwechslung hat am 2026-08-07 drei Testlaeufe wertlos gemacht.
-        let before = stats.GetStatValue(objId, gamedataStatType.HasSecondHeart);
-        GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(26, before);
-        if before <= 0.0 {
+        // Nur setzen, wenn der Stat noch nicht anliegt — sonst wuerde eine getragene
+        // Zweitherz-Cyberware faelschlich unserem Code zugeschrieben (genau diese Verwechslung
+        // hat am 2026-08-07 drei Testlaeufe wertlos gemacht, siehe choomlink-2hum).
+        if stats.GetStatValue(objId, gamedataStatType.HasSecondHeart) <= 0.0 {
             // ForceModifier statt AddModifier. Ein per AddModifier gesetzter Modifikator
             // ueberlebt die Wiederbelebung nicht: am 2026-08-07 stand der Stat beim zweiten
             // Tod wieder auf 0, und ein erneutes AddModifier holte ihn ueber sechs Sekunden
@@ -301,47 +298,26 @@ public class ChoomLinkRespawn {
             stats.ForceModifier(objId, RPGManager.CreateStatModifier(
                 gamedataStatType.HasSecondHeart, gameStatModifierType.Additive, 1.0));
         }
-        // Gemessen statt angenommen: ob der Stat wirklich anliegt, entscheidet ueber den
-        // gesamten Respawn-Pfad, und ein Modifier auf einem berechneten Stat koennte
-        // wirkungslos verpuffen. 20 = Stat-Wert nach dem Setzen.
-        GameInstance.GetNetworkGameSystem().playerActionTracker
-            .LogDiag(20, stats.GetStatValue(objId, gamedataStatType.HasSecondHeart));
     }
 }
 
 // Todesmeldung. Sitzt am Zustandsautomaten statt an der Gesundheitszahl, weil die mit
-// Zweitherz nie 0 erreicht. 21 = Tod betreten.
+// Zweitherz nie 0 erreicht.
+//
+// Den Zweitherz-Stat HIER nachzuziehen wuerde zu spaet kommen: StatsSystem.AddModifier wirkt
+// nicht sofort (gemessen 2026-08-07 — unmittelbar nach dem Aufruf las der Stat immer noch 0).
+// Das Auffrischen sitzt stattdessen im Gesundheits-Listener, wo Zeit dafuer ist.
 @wrapMethod(DeathEvents)
 protected func OnEnter(stateContext: ref<StateContext>, scriptInterface: ref<StateGameScriptInterface>) -> Void {
-    let tracker = GameInstance.GetNetworkGameSystem().playerActionTracker;
-    // Beide Stats, die SetIsResurrectionAllowedBasedOnState abfragt (:172-173), im Moment des
-    // Todes. Beim zweiten Tod sechs Sekunden nach dem ersten kam am 2026-08-07 wieder das
-    // Todesmenue — welches der beiden Tore zufiel, ist ohne Messung nicht zu unterscheiden,
-    // und der Statuseffekt SecondHeart taucht in diesem Tor ueberhaupt nicht auf.
-    //   21 = HasSecondHeart, 24 = ForcePreventResurrect
-    let stats = GameInstance.GetStatsSystem(scriptInterface.owner.GetGame());
-    let objId = Cast<StatsObjectID>(scriptInterface.ownerEntityID);
-    tracker.LogDiag(21, stats.GetStatValue(objId, gamedataStatType.HasSecondHeart));
-    tracker.LogDiag(24, stats.GetStatValue(objId, gamedataStatType.ForcePreventResurrect));
-
-    // HIER wird der Stat bewusst NICHT mehr nachgezogen. Der Versuch steht dokumentiert,
-    // weil sein Scheitern die eigentliche Regel zeigt: StatsSystem.AddModifier wirkt nicht
-    // sofort. Am 2026-08-07 las die Sonde unmittelbar nach dem AddModifier immer noch 0
-    // (code 20 = 0.00 im selben Logeintrag wie code 21 = 0.00). Ein Nachziehen im
-    // Todesmoment kommt also grundsaetzlich zu spaet, unabhaengig von der Reihenfolge.
-    // Das Auffrischen sitzt stattdessen im Gesundheits-Listener, wo Zeit dafuer ist.
-    tracker.OnPlayerHealthChanged(0.0, true);
+    GameInstance.GetNetworkGameSystem().playerActionTracker.OnPlayerHealthChanged(0.0, true);
     wrappedMethod(stateContext, scriptInterface);
 }
 
-// Respawn-Meldung. 22 = Wiederbelebung durchlaufen, mit der Gesundheit danach als Wert —
-// das ist der Beleg, dass statt des Todesmenues die Wiederbelebung kam.
 @wrapMethod(PlayerPuppet)
 protected func OnResurrected() -> Void {
     wrappedMethod();
     let health = GameInstance.GetStatPoolsSystem(this.GetGame())
         .GetStatPoolValue(Cast<StatsObjectID>(this.GetEntityID()), gamedataStatPoolType.Health, true);
-    GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(22, health);
 
     // BaseStatusEffect.SecondHeart bleibt bewusst LIEGEN. Er wurde hier zeitweise abgeraeumt,
     // in der Annahme, er sperre den naechsten Respawn — das war falsch, und das Abraeumen war
@@ -360,11 +336,6 @@ protected func OnResurrected() -> Void {
     //
     // Den zweiten Respawn sperrte in Wahrheit der verlorene HasSecondHeart-Stat; dafuer ist
     // ForceModifier zustaendig, nicht das Entfernen dieses Effekts.
-    //
-    // 23 = Zweitherz-Stat nach der Wiederbelebung.
-    GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(23,
-        GameInstance.GetStatsSystem(this.GetGame())
-            .GetStatValue(Cast<StatsObjectID>(this.GetEntityID()), gamedataStatType.HasSecondHeart));
     GameInstance.GetNetworkGameSystem().playerActionTracker.OnPlayerHealthChanged(health, false);
 }
 
@@ -379,61 +350,17 @@ protected cb func OnDetach() -> Bool {
     return wrappedMethod();
 }
 
-// DIAGNOSE (choomlink-2hum, 2026-08-03): erreicht ein relayter Schuss den Spieler ueberhaupt?
-//
-// Stand der Messungen: der Schuss ist vollstaendig korrekt aufgesetzt — gueltige Waffe im Slot,
-// attached, eigener Ranged-Attack (shoot status 0), Threat registriert, Pose korrekt, Waffe
-// erhoben und auf den Spieler gerichtet. Trotzdem faellt die Gesundheit nie.
-//
-// Damit ist die Frage binaer geworden: kommt gar kein Treffer an (Geometrie/Kollision), oder
-// kommt einer an und der Schaden wird unterdrueckt? OnHit auf ScriptedPuppet ist der frueheste
-// Punkt in der Vanilla-Kette (gameObject.script:984 -> ProcessDamagePipeline) und feuert
-// unabhaengig davon, ob am Ende Schaden herauskommt. PlayerPuppet erbt ihn.
-//
-// MESSERGEBNIS 2026-08-03: code 10 feuert einmal pro Schuss, im Takt der Schusskadenz. Die
-// Kugel ERREICHT den Spieler — Geometrie und Zielrichtung stimmen. Der Schaden bleibt trotzdem
-// aus. Diese Sonde trennt jetzt die verbliebenen Erklaerungen:
-//
-//   10 = Treffer, value = Attitude zwischen Spieler und Angreifer
-//        (EAIAttitude: 0 = Friendly, 1 = Neutral, 2 = Hostile).
-//        Friendly ist der Verdaechtige: CheckForQuickExit stempelt in dem Fall
-//        hitFlag.DealNoDamage (damageSystem.script:1832). Wir setzen zwar
-//        SetAttitudeGroup(n"neutral"), aber dieser Gruppenname kommt im Vanilla-Dump NIRGENDS
-//        vor — loest die CName nicht auf, bleibt die Judy-eigene, freundliche Gruppe stehen.
-//   11 = value 1 wenn attackComputed an dieser Stelle bereits befuellt ist, sonst -1.
-//        Wichtig, weil OnHit VOR der Berechnung liegt: die 0.00 aus dem ersten Durchlauf
-//        koennte schlicht "noch nicht gerechnet" heissen statt "auf null gerechnet".
-@wrapMethod(ScriptedPuppet)
-protected cb func OnHit(evt: ref<gameHitEvent>) -> Bool {
-    let result = wrappedMethod(evt);
-    if this.IsPlayer() {
-        let tracker = GameInstance.GetNetworkGameSystem().playerActionTracker;
-        let instigator = evt.attackData.GetInstigator();
-        let attitude: Int32 = -1;
-        if IsDefined(instigator) {
-            attitude = EnumInt(GameObject.GetAttitudeBetween(this, instigator));
-        }
-        tracker.LogDiag(10, Cast<Float>(attitude));
-        tracker.LogDiag(11, IsDefined(evt.attackComputed) ? 1.0 : -1.0);
-        // 13 = ist die Attack-Source gesetzt? Eine undefinierte Source laesst
-        // CheckForQuickExit die gesamte Pipeline hart abbrechen
-        // (damageSystem.script:1782-1815) — und sie ist ein anderes Feld als der Instigator,
-        // der nachweislich gesetzt ist.
-        tracker.LogDiag(13, IsDefined(evt.attackData.GetSource()) ? 1.0 : -1.0);
-    }
-    return result;
-}
-
-// Der spaetere Punkt in derselben Kette: OnDamageReceived wird nur gestellt, wenn der
-// Gesamtschaden groesser null ist (damageSystem.script:1309-1314). Feuert code 12 nie, waehrend
-// code 10 im Takt kommt, ist der Schaden nachweislich auf null gerechnet worden — und nicht
-// etwa der Treffer ausgeblieben.
+// OnDamageReceived (not OnHit) is where we read a relayed shot's outcome: it only fires once
+// the damage system has fully processed the hit and the total is greater than zero
+// (damageSystem.script:1309-1314). OnHit fires unconditionally, including for hits computed
+// down to zero, and could not by itself distinguish "no hit arrived" from "hit arrived, damage
+// suppressed" — that distinction (choomlink-2hum, 2026-08-03) is what proved the relay's
+// geometry and targeting were already correct, and that the remaining bug was in damage
+// computation, not in reaching the player at all.
 @wrapMethod(ScriptedPuppet)
 protected cb func OnDamageReceived(evt: ref<gameDamageReceivedEvent>) -> Bool {
     let result = wrappedMethod(evt);
     if this.IsPlayer() {
-        GameInstance.GetNetworkGameSystem().playerActionTracker.LogDiag(12, evt.totalDamageReceived);
-
         // Hit-feedback (2026-08-08, moved here 2026-08-09): originally measured in the
         // DamageSystem.Process wrap by snapshotting the Health stat pool before/after
         // wrappedMethod. That snapshot was silently wrong -- the pool write is not synchronous
@@ -505,8 +432,6 @@ private final func Process(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -
         hitEvent.attackData.RemoveFlag(hitFlag.DealNoDamage);
         hitEvent.attackComputed.SetAttackValue(puppet.choomlink_lastShotDamage,
                                                gamedataDamageType.Physical);
-        GameInstance.GetNetworkGameSystem().playerActionTracker
-            .LogDiag(15, puppet.choomlink_lastShotDamage);
     }
     wrappedMethod(hitEvent, cache);
 }
