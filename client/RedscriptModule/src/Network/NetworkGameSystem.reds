@@ -341,6 +341,7 @@ public native class NetworkGameSystem extends IGameSystem {
             return;
         }
         puppet.choomlink_networkedEntityId = networkedEntityId;
+        puppet.choomlink_networkedIdSet = true;
     }
 
     // Hit-feedback (2026-08-08): the shooter's own client never runs DamageSystem.Process for
@@ -357,7 +358,7 @@ public native class NetworkGameSystem extends IGameSystem {
         if !IsDefined(victim) {
             return 1;
         }
-        let localPlayer = GameInstance.GetPlayerSystem(entity.GetGame()).GetLocalPlayerMainGameObject();
+        let localPlayer = GameInstance.GetPlayerSystem(victim.GetGame()).GetLocalPlayerMainGameObject();
         if !IsDefined(localPlayer) {
             return 2;
         }
@@ -376,14 +377,14 @@ public native class NetworkGameSystem extends IGameSystem {
             flag.source = n"choomlink";
             ArrayPush(info.userData.flags, flag);
         }
-        GameInstance.GetTargetingSystem(entity.GetGame()).GetPuppetBlackboardUpdater().AddDamageInfo(info);
+        GameInstance.GetTargetingSystem(victim.GetGame()).GetPuppetBlackboardUpdater().AddDamageInfo(info);
 
         if isDead {
             let kill: KillInfo;
             kill.killerEntity = localPlayer;
             kill.victimEntity = victim;
             kill.killType = gameKillType.Normal;
-            GameInstance.GetTargetingSystem(entity.GetGame()).GetPuppetBlackboardUpdater().AddKillInfo(kill);
+            GameInstance.GetTargetingSystem(victim.GetGame()).GetPuppetBlackboardUpdater().AddKillInfo(kill);
         }
         return 0;
     }
@@ -595,6 +596,15 @@ let choomlink_lastShotDamage: Float;
 // SetupPuppetNetworkId above, the first time C++ resolves this puppet from a teleport packet.
 @addField(ScriptedPuppet)
 let choomlink_networkedEntityId: Uint64;
+
+// Separate "is it set yet" flag: this game version's RTTI exposes no comparison operator for
+// Uint64 at all (measured 2026-08-09 -- both OperatorGreater and OperatorNotEqual list every
+// primitive type EXCEPT Uint64 in their overload error), so `choomlink_networkedEntityId != 0u`
+// does not compile. Same shape as the m_hasReported/m_lastReported pair used for the health
+// listener's rate limit, and for the same reason: redscript fields default to their zero value,
+// so a bare Bool default (false) IS the "not set yet" sentinel, no comparison needed.
+@addField(ScriptedPuppet)
+let choomlink_networkedIdSet: Bool;
 
 @addMethod(GameInstance)
 public static native func GetNetworkGameSystem() -> ref<NetworkGameSystem>

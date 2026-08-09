@@ -52,12 +52,18 @@ if (Test-Path $codeware) {
 $outFile = Join-Path ([System.IO.Path]::GetTempPath()) 'choomlink-redscript-check.redscripts'
 $args += @('-b', $bundle, '-o', $outFile)
 
-& $RedscriptCli @args
+$output = & $RedscriptCli @args | Out-String -Stream
 $exit = $LASTEXITCODE
+$output | ForEach-Object { Write-Host $_ }
 
 if (Test-Path $outFile) { Remove-Item -Force $outFile }
 
-if ($exit -ne 0) {
-    throw "Redscript check failed (exit code $exit)."
+# $exit alone is not proof of success (found 2026-08-09): redscript-cli's `compile` prints
+# `ERROR [...] Build failed` for genuine compile errors -- unresolved methods, type mismatches --
+# while still exiting 0. A script that reports success is not evidence (this machine's own
+# standing rule) -- grep the actual diagnostic text instead of trusting the exit code alone.
+$hasErrorLine = $output | Select-String -Pattern '^ERROR ' -Quiet
+if ($exit -ne 0 -or $hasErrorLine) {
+    throw "Redscript check failed (exit code $exit, error lines present: $hasErrorLine)."
 }
 Write-Host "Redscript OK"

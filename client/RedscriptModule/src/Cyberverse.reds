@@ -484,11 +484,24 @@ private final func Process(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -
 
     wrappedMethod(hitEvent, cache);
 
-    if isOurShot && puppet.choomlink_networkedEntityId > 0u {
+    if isOurShot && puppet.choomlink_networkedIdSet {
         let healthAfter = statPools.GetStatPoolValue(statsId, gamedataStatPoolType.Health, false);
         let damageDealt = healthBefore - healthAfter;
         if damageDealt > 0.0 {
-            let isHeadshot = Equals(IntEnum<EAIHitBodyPart>(hitEvent.attackData.HitBodyPart()), EAIHitBodyPart.Head);
+            // Not a flag read: vanilla's own headshot detection (damageSystem.script:400,
+            // ProcessLocalizedDamage) returns BEFORE setting hitFlag.Headshot whenever the
+            // instigator is not a player -- and ours never is, from the victim's point of view
+            // (the remote puppet is an NPC). hitFlag.Headshot would simply never be set for any
+            // of our relayed shots. Replicated here instead, from the same hit-shape data
+            // (:414-421), deliberately WITHOUT that player-instigator gate.
+            let isHeadshot = false;
+            let hitShapes: array<HitShapeData> = hitEvent.hitRepresentationResult.hitShapes;
+            if ArraySize(hitShapes) > 0 {
+                let hitUserData = DamageSystemHelper.GetHitShapeUserDataBase(hitShapes[0]);
+                if IsDefined(hitUserData) {
+                    isHeadshot = HitShapeUserDataBase.IsHitReactionZoneHead(hitUserData);
+                }
+            }
             let isDead = healthAfter <= 0.0;
             GameInstance.GetNetworkGameSystem().playerActionTracker
                 .OnPlayerWasHit(puppet.choomlink_networkedEntityId, damageDealt, isHeadshot, isDead);
