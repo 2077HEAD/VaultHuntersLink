@@ -333,6 +333,61 @@ public native class NetworkGameSystem extends IGameSystem {
     // in-game, second attempt: EngineTime.ToFloat(GameInstance.GetSimTime(...)).
     // Returns a status code that the C++ caller logs (FTLog never reaches a file). The point is
     // to tell apart the remaining candidates for "shot fires but does no damage" without guessing:
+    // Called once per puppet from the C++ side (eTeleportEntity, first resolution) -- see the
+    // choomlink_networkedEntityId field comment for why this needs to be set at all.
+    public func SetupPuppetNetworkId(entity: ref<Entity>, networkedEntityId: Uint64) {
+        let puppet = entity as ScriptedPuppet;
+        if !IsDefined(puppet) {
+            return;
+        }
+        puppet.choomlink_networkedEntityId = networkedEntityId;
+    }
+
+    // Hit-feedback (2026-08-08): the shooter's own client never runs DamageSystem.Process for
+    // its own shot (victim-authoritative model, choomlink-2hum), so this is the only place a
+    // confirmed hit reaches the shooter's screen. Builds the same DamageInfo/KillInfo values
+    // vanilla itself constructs (core/entity/gameObject.script:1116/1122 -- DisplayHitUI /
+    // DisplayKillUI) and hands them to the native widget via PuppetBlackboardUpdater. No custom
+    // UI: TargetHitIndicatorGameController already renders crosshair marker, sound, floating
+    // damage number and kill confirmation off this same call, filtered to the actual instigator.
+    //   0 = applied   1 = not a GameObject   2 = no local player
+    public func ApplyHitConfirmedOnPuppet(entity: ref<Entity>, damageDealt: Float, isHeadshot: Bool,
+                                          isDead: Bool) -> Int32 {
+        let victim = entity as GameObject;
+        if !IsDefined(victim) {
+            return 1;
+        }
+        let localPlayer = GameInstance.GetPlayerSystem(entity.GetGame()).GetLocalPlayerMainGameObject();
+        if !IsDefined(localPlayer) {
+            return 2;
+        }
+
+        let info: DamageInfo;
+        info.hitPosition = victim.GetWorldPosition();
+        info.damageValue = damageDealt;
+        info.damageType = gamedataDamageType.Physical;
+        info.hitType = isHeadshot ? gameuiHitType.CriticalHit : gameuiHitType.Hit;
+        info.entityHit = victim;
+        info.instigator = localPlayer;
+        info.userData = new DamageInfoUserData();
+        if isHeadshot {
+            let flag: SHitFlag;
+            flag.flag = hitFlag.Headshot;
+            flag.source = n"choomlink";
+            ArrayPush(info.userData.flags, flag);
+        }
+        GameInstance.GetTargetingSystem(entity.GetGame()).GetPuppetBlackboardUpdater().AddDamageInfo(info);
+
+        if isDead {
+            let kill: KillInfo;
+            kill.killerEntity = localPlayer;
+            kill.victimEntity = victim;
+            kill.killType = gameKillType.Normal;
+            GameInstance.GetTargetingSystem(entity.GetGame()).GetPuppetBlackboardUpdater().AddKillInfo(kill);
+        }
+        return 0;
+    }
+
     //   0 = fired, weapon carried its own ranged attack
     //   1 = fired, ranged attack derived from the weapon record as a fallback
     //   2 = fired WITHOUT any ranged attack -> the projectile carries no damage payload
@@ -534,6 +589,12 @@ let choomlink_threatRegistered: Bool;
 // Opfers greift ihn beim Treffer ab. Siehe den DamageSystem.Process-Wrap in Cyberverse.reds.
 @addField(ScriptedPuppet)
 let choomlink_lastShotDamage: Float;
+
+// The puppet's own networkedEntityId. redscript has no way to resolve this on its own (the
+// mapping only exists forward, networkedEntityId -> engine entity, in C++) -- set once by
+// SetupPuppetNetworkId above, the first time C++ resolves this puppet from a teleport packet.
+@addField(ScriptedPuppet)
+let choomlink_networkedEntityId: Uint64;
 
 @addMethod(GameInstance)
 public static native func GetNetworkGameSystem() -> ref<NetworkGameSystem>

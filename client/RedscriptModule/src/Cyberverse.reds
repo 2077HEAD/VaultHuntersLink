@@ -458,18 +458,42 @@ protected cb func OnDamageReceived(evt: ref<gameDamageReceivedEvent>) -> Bool {
 private final func Process(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -> Void {
     let instigator = hitEvent.attackData.GetInstigator();
     let puppet = instigator as ScriptedPuppet;
-    if IsDefined(hitEvent.target) && hitEvent.target.IsPlayer()
+    let isOurShot = IsDefined(hitEvent.target) && hitEvent.target.IsPlayer()
         && IsDefined(puppet) && !instigator.IsPlayer()
         && puppet.choomlink_threatRegistered
         && puppet.choomlink_lastShotDamage > 0.0
-        && IsDefined(hitEvent.attackComputed) {
+        && IsDefined(hitEvent.attackComputed);
+
+    let statPools: ref<StatPoolsSystem>;
+    let statsId: StatsObjectID;
+    let healthBefore: Float;
+    if isOurShot {
         hitEvent.attackData.RemoveFlag(hitFlag.DealNoDamage);
         hitEvent.attackComputed.SetAttackValue(puppet.choomlink_lastShotDamage,
                                                gamedataDamageType.Physical);
         GameInstance.GetNetworkGameSystem().playerActionTracker
             .LogDiag(15, puppet.choomlink_lastShotDamage);
+
+        // Hit-feedback (2026-08-08): measure the REAL, post-armor damage as a points delta —
+        // points, not percent, because a percentage number would be meaningless on the
+        // shooter's HUD.
+        statPools = GameInstance.GetStatPoolsSystem(hitEvent.target.GetGame());
+        statsId = Cast<StatsObjectID>(hitEvent.target.GetEntityID());
+        healthBefore = statPools.GetStatPoolValue(statsId, gamedataStatPoolType.Health, false);
     }
+
     wrappedMethod(hitEvent, cache);
+
+    if isOurShot && puppet.choomlink_networkedEntityId > 0u {
+        let healthAfter = statPools.GetStatPoolValue(statsId, gamedataStatPoolType.Health, false);
+        let damageDealt = healthBefore - healthAfter;
+        if damageDealt > 0.0 {
+            let isHeadshot = Equals(IntEnum<EAIHitBodyPart>(hitEvent.attackData.HitBodyPart()), EAIHitBodyPart.Head);
+            let isDead = healthAfter <= 0.0;
+            GameInstance.GetNetworkGameSystem().playerActionTracker
+                .OnPlayerWasHit(puppet.choomlink_networkedEntityId, damageDealt, isHeadshot, isDead);
+        }
+    }
 }
 
 // Fires when the locomotion state machine actually enters the jump state — unlike the Jump
