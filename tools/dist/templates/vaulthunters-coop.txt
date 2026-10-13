@@ -1,0 +1,10 @@
+# Vault Hunters Co-op - who to connect to.
+# Lines starting with # are ignored. No spaces around the "=".
+#
+# JOINING: put your host's address here (their Tailscale / ZeroTier / Radmin VPN address, or
+#          their public IP if they forwarded the port). Then run "Vault Hunters Co-op - Join.bat".
+# HOSTING: you don't need an address; just run "Vault Hunters Co-op - Host.bat".
+#          Change the port here only if 1337 is taken (everyone must use the same port).
+
+address=@SERVER_ADDRESS@
+port=@SERVER_PORT@

@@ -1,0 +1,162 @@
+name: Vault Hunters Link
+
+# Builds everything a player needs, on GitHub's machines, so nobody has to install Visual Studio:
+#   * VaultHuntersLink-Client.zip  -> unpack into the Cyberpunk 2077 folder (every player)
+#   * VaultHuntersLink-Server.zip  -> unpack into the Cyberpunk 2077 folder (the host)
+# plus a Linux smoke test of the server with headless bot clients.
+#
+# Push a tag like v0.1.0 to publish both zips as a GitHub Release.
+
+on:
+  push:
+    branches: [ "vaulthunters", "main", "master" ]
+    tags: [ "v*" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  smoke-test-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libprotobuf-dev protobuf-compiler
+
+      - name: Build GameNetworkingSockets
+        run: |
+          git clone --depth 1 --branch v1.4.1 https://github.com/ValveSoftware/GameNetworkingSockets.git /tmp/gns
+          cmake -S /tmp/gns -B /tmp/gns/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=OFF -DBUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/tmp/gns-install
+          cmake --build /tmp/gns/build
+          cmake --install /tmp/gns/build
+
+      - name: Build native server and bot harness
+        run: |
+          cat > /tmp/gns-compat.cmake <<'CMAKE'
+          find_package(Protobuf REQUIRED)
+          find_package(OpenSSL REQUIRED)
+          find_package(Threads REQUIRED)
+          find_package(GameNetworkingSockets CONFIG REQUIRED)
+          if(NOT TARGET GameNetworkingSockets::shared)
+            add_library(GameNetworkingSockets::shared ALIAS GameNetworkingSockets::GameNetworkingSockets)
+          endif()
+          CMAKE
+          for proj in server/Native tools/bot-harness; do
+            cmake -S $proj -B /tmp/build/$proj -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_PREFIX_PATH=/tmp/gns-install -DCMAKE_PROJECT_INCLUDE=/tmp/gns-compat.cmake
+            cmake --build /tmp/build/$proj
+          done
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build managed server
+        run: |
+          dotnet publish server/Managed -c Debug -o /tmp/server-out
+          cp /tmp/build/server/Native/src/libCyberverse.Server.Native.so /tmp/server-out/
+          cp /tmp/gns-install/lib/libGameNetworkingSockets.so /tmp/server-out/
+
+      - name: Co-op smoke test
+        env:
+          LD_LIBRARY_PATH: /tmp/server-out:/tmp/gns-install/lib
+        run: tools/ci/coop-smoke-test.sh /tmp/server-out /tmp/build/tools/bot-harness/bot-harness
+
+  build-windows:
+    runs-on: windows-latest
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: lukka/get-cmake@latest
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '271a5b8850aa50f9a40269cbf3cf414b36e333d6'
+
+      - name: Build client plugin
+        shell: pwsh
+        run: |
+          cmake -S client/red4ext -B client/red4ext/build/ninja-vcpkg -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          cmake --build client/red4ext/build/ninja-vcpkg --config Release
+
+      - name: Build native server
+        shell: pwsh
+        run: |
+          cmake -S server/Native -B server/Native/build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          cmake --build server/Native/build --config Release
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Publish managed server (self-contained, no .NET install needed)
+        shell: pwsh
+        run: dotnet publish server/Managed -c Release -r win-x64 --self-contained true -o out/server/VaultHuntersServer
+
+      - name: Assemble zips
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+          # ---- server ----
+          $srv = 'out/server/VaultHuntersServer'
+          Get-ChildItem server/Native/build -Recurse -Filter *.dll | Copy-Item -Destination $srv -Force
+          if (-not (Test-Path "$srv/Cyberverse.Server.Native.dll")) { throw 'native server DLL missing' }
+          if (-not (Test-Path "$srv/Cyberverse.Server.exe")) { throw 'server exe missing' }
+          Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Host.bat' out/server/
+
+          # ---- client ----
+          $cli = 'out/client'
+          $plugin = "$cli/red4ext/plugins/Cyberverse"
+          New-Item -ItemType Directory -Force -Path $plugin, "$cli/r6/scripts/Cyberverse", "$cli/archive/pc/mod", "$cli/r6/tweaks/VaultHuntersLink" | Out-Null
+          Get-ChildItem client/red4ext/build/ninja-vcpkg -Recurse -Filter *.dll | Copy-Item -Destination $plugin -Force
+          if (-not (Test-Path "$plugin/Cyberverse.Red4Ext.dll")) { throw 'client plugin DLL missing' }
+          Copy-Item -Path client/RedscriptModule/src/* -Destination "$cli/r6/scripts/Cyberverse" -Recurse
+          Copy-Item client/assets/choomlink_puppet.archive "$cli/archive/pc/mod/"
+          Copy-Item client/assets/choomlink/choomlink.yaml "$cli/r6/tweaks/VaultHuntersLink/"
+          Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Join.bat' $cli
+          $cfg = (Get-Content tools/dist/templates/vaulthunters-coop.txt -Raw).Replace('@SERVER_ADDRESS@', '127.0.0.1').Replace('@SERVER_PORT@', '1337')
+          [System.IO.File]::WriteAllText("$cli/vaulthunters-coop.txt", $cfg, $utf8NoBom)
+          foreach ($d in @($cli, 'out/server')) {
+            Copy-Item LICENSE "$d/VaultHuntersLink-LICENSE.txt"
+            Copy-Item VAULTHUNTERS.md "$d/VaultHuntersLink-README.md"
+          }
+
+          # Forward-slash entry names (see tools/dist/package-client.ps1 for why).
+          Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+          foreach ($pair in @(@('out/client', 'VaultHuntersLink-Client.zip'), @('out/server', 'VaultHuntersLink-Server.zip'))) {
+            $root = (Resolve-Path $pair[0]).Path
+            $zip = [System.IO.Compression.ZipFile]::Open((Join-Path (Get-Location) $pair[1]), 'Create')
+            try {
+              foreach ($f in Get-ChildItem $root -Recurse -File) {
+                $name = $f.FullName.Substring($root.Length).TrimStart('\').Replace('\', '/')
+                [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $f.FullName, $name, 'Optimal')
+              }
+            } finally { $zip.Dispose() }
+          }
+          Get-ChildItem *.zip | ForEach-Object { "{0}  {1:N0} KB  {2}" -f $_.Name, ($_.Length / 1KB), (Get-FileHash $_).Hash }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VaultHuntersLink
+          path: VaultHuntersLink-*.zip
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: VaultHuntersLink-*.zip
