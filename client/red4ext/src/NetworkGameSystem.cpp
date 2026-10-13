@@ -126,6 +126,26 @@ void NetworkGameSystem::OnNetworkUpdate(RED4ext::FrameInfo& frame_info, RED4ext:
     }
     m_pendingHitConfirms.clear();
 
+    // Vault Hunters co-op: same deferral for script events and the avatar choice. Script events
+    // are often sent from reactions to incoming ones (a client answering "vh.session" with its
+    // class), i.e. from inside PollIncomingMessages() -- the exact reentrant-send case above.
+    if (FullyConnected)
+    {
+        if (m_pendingAvatar.has_value())
+        {
+            EnqueueMessage(0, m_pendingAvatar.value());
+            m_pendingAvatar.reset();
+        }
+
+        for (const auto& scriptEvent : m_pendingScriptEvents)
+        {
+            EnqueueMessage(0, scriptEvent);
+        }
+    }
+    // Events queued while not connected are dropped rather than replayed later: they describe
+    // a moment that has passed. The avatar is state, so it stays queued until we are connected.
+    m_pendingScriptEvents.clear();
+
     UpdatePuppetInterpolation(frame_info.deltaTime);
     TrackPlayerPosition(frame_info.deltaTime);
 
@@ -1008,6 +1028,39 @@ void NetworkGameSystem::PollIncomingMessages()
             // inherit the previous occupant's last status and go quiet on its own first shot.
             m_lastThreatStatus.erase(destroy_entity.networkedEntityId);
             m_lastShootStatus.erase(destroy_entity.networkedEntityId);
+        }
+        break;
+
+        case eEntityScriptEvent:
+        {
+            // Vault Hunters co-op (2026-10-13): generic redscript event relayed by the server.
+            // Handed to redscript as-is; NetworkGameSystem.OnScriptEvent (NetworkGameSystem.reds)
+            // fans it out to the registered listeners. Never interpreted here.
+            EntityScriptEvent script_event = {};
+            if (zpp::bits::failure(in(script_event)))
+            {
+                SDK->logger->Error(PLUGIN, "Faulty packet: EntityScriptEvent");
+                pIncomingMsg->Release();
+                continue;
+            }
+
+            auto& data = script_event.data;
+            data.text[sizeof(data.text) - 1] = '\0'; // never trust the terminator on the wire
+
+            Red::DynArray<float> floats;
+            for (const auto value : data.f)
+            {
+                floats.PushBack(value);
+            }
+
+            // Ids go to redscript as Int32 and payload words as Int64: this game version's script
+            // RTTI has no comparison operators for Uint64 at all (see choomlink_networkedIdSet in
+            // NetworkGameSystem.reds), and game modes need to compare both. Entity ids are a
+            // per-session counter, so they fit in 31 bits with room to spare.
+            Red::CallVirtual(this, "OnScriptEvent", Red::CName(data.channel), static_cast<int32_t>(data.sender),
+                             static_cast<int32_t>(data.target), static_cast<int64_t>(data.u0),
+                             static_cast<int64_t>(data.u1), static_cast<int64_t>(data.u2), floats,
+                             Red::CString(data.text));
         }
         break;
 

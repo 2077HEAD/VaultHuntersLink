@@ -10,6 +10,9 @@
 
 #include <serverbound/WorldPacketsServerBound.h>
 
+#include <cstring>
+#include <iterator>
+
 void PlayerActionTracker::RecordPlayerAction(RED4ext::CName actionName, RED4ext::gameinputActionType actionType,
                                              float value)
 {
@@ -114,6 +117,47 @@ void PlayerActionTracker::OnPlayerWasHit(const uint64_t shooterNetworkedEntityId
     if (networkSystem)
     {
         networkSystem->QueuePlayerWasHit(was_hit);
+    }
+}
+
+void PlayerActionTracker::SendScriptEvent(const RED4ext::CName channel, const int32_t target, const int64_t u0,
+                                          const int64_t u1, const int64_t u2, const RED4ext::DynArray<float>& f,
+                                          const RED4ext::CString& text)
+{
+    PlayerScriptEvent evt = {};
+    evt.data.channel = channel.hash;
+    evt.data.sender = 0; // stamped by the server
+    evt.data.target = target > 0 ? static_cast<uint64_t>(target) : 0; // <= 0: everyone else
+    evt.data.u0 = static_cast<uint64_t>(u0);
+    evt.data.u1 = static_cast<uint64_t>(u1);
+    evt.data.u2 = static_cast<uint64_t>(u2);
+    for (uint32_t i = 0; i < f.size() && i < std::size(evt.data.f); i++)
+    {
+        evt.data.f[i] = f[i];
+    }
+    const auto* chars = text.c_str();
+    if (chars != nullptr)
+    {
+        std::strncpy(evt.data.text, chars, sizeof(evt.data.text) - 1);
+    }
+
+    // Queued, never sent directly: see NetworkGameSystem::m_pendingHitConfirms.
+    const auto networkSystem = Red::GetGameSystem<NetworkGameSystem>();
+    if (networkSystem)
+    {
+        networkSystem->QueueScriptEvent(evt);
+    }
+}
+
+void PlayerActionTracker::SetAvatar(const RED4ext::TweakDBID record)
+{
+    PlayerSetAvatar avatar = {};
+    avatar.recordId = record.value;
+    SDK->logger->InfoF(PLUGIN, "co-op: avatar record %llu", record.value);
+    const auto networkSystem = Red::GetGameSystem<NetworkGameSystem>();
+    if (networkSystem)
+    {
+        networkSystem->QueueAvatar(avatar);
     }
 }
 

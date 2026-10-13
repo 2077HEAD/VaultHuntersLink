@@ -3,6 +3,7 @@ using Cyberverse.Server.NativeLayer.Protocol.Clientbound;
 using Cyberverse.Server.NativeLayer.Protocol.Serverbound;
 using Cyberverse.Server.PacketHandling;
 using Cyberverse.Server.Services;
+using Cyberverse.Server.Types;
 using NLog;
 
 namespace Cyberverse.Server;
@@ -16,6 +17,14 @@ public class GameServer: NativeGameServer, IPacketSink
     public readonly EntityTracker EntityTracker;
     public readonly PlayerService PlayerService = new();
     public readonly ServerConfig Config;
+
+    /// <summary>Vault Hunters co-op: raised after a player's puppet entered the world.</summary>
+    public event Action<Player>? PlayerJoinedWorld;
+
+    /// <summary>Vault Hunters co-op: raised after a player's connection and entities are gone.</summary>
+    public event Action<Player>? PlayerLeft;
+
+    public void RaisePlayerJoinedWorld(Player player) => PlayerJoinedWorld?.Invoke(player);
 
     public GameServer(ushort listeningPort, ServerConfig config) : base(listeningPort)
     {
@@ -58,6 +67,7 @@ public class GameServer: NativeGameServer, IPacketSink
 
             EntityTracker.OnPlayerDisconnected(connectionId);
             PlayerService.ConnectedPlayers.Remove(connectionId);
+            PlayerLeft?.Invoke(player);
         }
     }
 

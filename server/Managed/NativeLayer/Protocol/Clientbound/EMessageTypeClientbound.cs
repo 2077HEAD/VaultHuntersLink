@@ -11,4 +11,5 @@ public enum EMessageTypeClientbound: ushort
     EntityShoot = 6,
     EntityHealth = 7,
     EntityHitConfirmed = 8,
+    EntityScriptEvent = 9, // Vault Hunters co-op
 }

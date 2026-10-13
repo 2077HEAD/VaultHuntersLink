@@ -12,5 +12,7 @@ public enum EMessageTypeServerbound: ushort
     PlayerEquipItem = 7,
     PlayerShoot = 8,
     PlayerHealthUpdate = 9,
-    PlayerWasHit = 10
+    PlayerWasHit = 10,
+    PlayerScriptEvent = 11, // Vault Hunters co-op
+    PlayerSetAvatar = 12    // Vault Hunters co-op
 }

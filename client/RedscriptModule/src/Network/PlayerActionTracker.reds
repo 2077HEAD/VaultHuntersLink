@@ -13,4 +13,8 @@ public native class PlayerActionTracker {
     public native func OnPlayerWasHit(shooterNetworkedEntityId: Uint64, damageDealt: Float, isHeadshot: Bool, isDead: Bool) -> Void;
     public native func LogDiag(code: Int32, value: Float) -> Void;
     public native func TrackJump() -> Void;
+    // Vault Hunters co-op (2026-10-13): generic script events + class avatar. Prefer the wrappers
+    // on NetworkGameSystem (SendScriptEvent / SetAvatar), they validate the payload.
+    public native func SendScriptEvent(channel: CName, target: Int32, u0: Int64, u1: Int64, u2: Int64, f: array<Float>, text: String) -> Void;
+    public native func SetAvatar(record: TweakDBID) -> Void;
 }

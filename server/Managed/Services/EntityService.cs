@@ -12,7 +12,9 @@ public class EntityService
 {
     // TODO: Make this private and provide API to get by Id and iterate over so that we can enforce using CreateEntity?
     public readonly Dictionary<ulong, Entity> SpawnedEntities = new();
-    private ulong _entityIdCounter = 0u;
+    // Vault Hunters co-op: ids start at 1 so 0 can mean "nobody" -- ScriptEventData.Target uses 0
+    // for "broadcast", and the first player's puppet must still be addressable.
+    private ulong _entityIdCounter = 1u;
     
     public Entity CreateEntity(ulong recordId)
     {

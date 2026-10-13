@@ -47,14 +47,25 @@ public class PlayerPacketHandler
             Logger.Trace("Player {0} joined the world at ({1}, {2}, {3})", player.Name, 
                 content.position.x, content.position.y, content.position.z);
 
-            var choice = Random.Next(PossiblePlayerNpcChoice.Length);
-            var entity = server.EntityService.CreateEntity(PossiblePlayerNpcChoice[choice]);
+            // Vault Hunters co-op: a player who already told us their class avatar is rendered as
+            // that; everyone else keeps upstream's random story NPC until PlayerSetAvatar arrives.
+            Entity entity;
+            if (player.AvatarRecordId != 0)
+            {
+                entity = server.EntityService.CreateEntity(player.AvatarRecordId);
+            }
+            else
+            {
+                var choice = Random.Next(PossiblePlayerNpcChoice.Length);
+                entity = server.EntityService.CreateEntity(PossiblePlayerNpcChoice[choice]);
+            }
             entity.WorldTransform = content.position; // Spawn the entity at the right spot already
             entity.NetworkIdOwner = player.ConnectionId;
             player.PuppetEntity = entity;
                 
             // Since we only call the tracking for moved entities, force sync every entity to that player:
             _tracker!.InitialSpawnForPlayer(player);
+            server.RaisePlayerJoinedWorld(player);
         }
         else
         {

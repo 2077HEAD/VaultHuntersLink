@@ -13,5 +13,7 @@ enum EMessageTypeServerbound: uint16_t {
     ePlayerEquipItem = 7,
     ePlayerShoot = 8,
     ePlayerHealthUpdate = 9,
-    ePlayerWasHit = 10
+    ePlayerWasHit = 10,
+    ePlayerScriptEvent = 11, // Vault Hunters co-op: generic redscript event, see ScriptEvent.h
+    ePlayerSetAvatar = 12    // Vault Hunters co-op: which character record other players see us as
 };

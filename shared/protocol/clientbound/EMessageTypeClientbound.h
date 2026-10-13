@@ -12,4 +12,5 @@ enum EMessageTypeClientbound: uint16_t {
     eEntityShoot = 6,
     eEntityHealth = 7,
     eEntityHitConfirmed = 8,
+    eEntityScriptEvent = 9, // Vault Hunters co-op: relayed generic redscript event, see ScriptEvent.h
 };

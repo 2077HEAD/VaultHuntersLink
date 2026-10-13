@@ -40,6 +40,13 @@ public:
     /// Generic diagnostic channel for the redscript side. FTLog only reaches the CET console
     /// window, never a file, so anything an automated test has to read must come through here.
     void LogDiag(int32_t code, float value);
+    /// Vault Hunters co-op (2026-10-13): send a generic event to the other players (target 0)
+    /// or to one player (target = their puppet's networkedEntityId). See shared ScriptEvent.h.
+    /// Signed types on purpose: script RTTI cannot compare Uint64 (see NetworkGameSystem.cpp).
+    void SendScriptEvent(RED4ext::CName channel, int32_t target, int64_t u0, int64_t u1, int64_t u2,
+                         const RED4ext::DynArray<float>& f, const RED4ext::CString& text);
+    /// Vault Hunters co-op: the character record the other players should see us as.
+    void SetAvatar(RED4ext::TweakDBID record);
 private:
     RTTI_IMPL_TYPEINFO(PlayerActionTracker);
     RTTI_IMPL_ALLOCATOR();
@@ -58,5 +65,7 @@ RTTI_DEFINE_CLASS(PlayerActionTracker, {
     RTTI_METHOD(OnPlayerHealthChanged);
     RTTI_METHOD(OnPlayerWasHit);
     RTTI_METHOD(LogDiag);
+    RTTI_METHOD(SendScriptEvent);
+    RTTI_METHOD(SetAvatar);
     RTTI_ALIAS("Cyberverse.Network.Managers.PlayerActionTracker");
 });

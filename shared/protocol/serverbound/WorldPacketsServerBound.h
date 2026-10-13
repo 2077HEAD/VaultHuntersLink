@@ -2,6 +2,7 @@
 
 #include "../MessageFrame.h"
 #include "EMessageTypeServerbound.h"
+#include "../ScriptEvent.h"
 
 struct PlayerJoinWorld {
     Vector3 position;
@@ -144,6 +145,34 @@ struct PlayerWasHit {
     inline static void FillMessageFrame(MessageFrame& frame)
     {
         frame.message_type = ePlayerWasHit;
+        frame.channel_id = 0;
+    }
+};
+
+// Vault Hunters co-op (2026-10-13): a generic event from this client's redscript layer. The
+// server stamps `data.sender` with our puppet's networkedEntityId and relays it as
+// EntityScriptEvent -- to everyone else when `data.target` is 0, otherwise only to that player.
+struct PlayerScriptEvent {
+    ScriptEventData data;
+    using serialize = zpp::bits::members<1>; // see ScriptEventData
+
+    inline static void FillMessageFrame(MessageFrame& frame)
+    {
+        frame.message_type = ePlayerScriptEvent;
+        frame.channel_id = 0; // reliable, ordered: events are not position spam
+    }
+};
+
+// Vault Hunters co-op (2026-10-13): the character record our puppet should use on the other
+// clients (the class avatar), instead of upstream's random story NPC. May arrive before or after
+// PlayerJoinWorld: before, the server uses it for the spawn; after, it respawns the puppet for
+// everyone already tracking it.
+struct PlayerSetAvatar {
+    uint64_t recordId; // TweakDBID value (crc32 | length << 32)
+
+    inline static void FillMessageFrame(MessageFrame& frame)
+    {
+        frame.message_type = ePlayerSetAvatar;
         frame.channel_id = 0;
     }
 };

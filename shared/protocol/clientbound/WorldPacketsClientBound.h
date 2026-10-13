@@ -2,6 +2,7 @@
 
 #include "../MessageFrame.h"
 #include "EMessageTypeClientbound.h"
+#include "../ScriptEvent.h"
 
 // TODO: we need to find a solution for strings, as zpp::bits doesn't support char* and c# doesn't support std::string.
 // constant arrays are wasteful. So we add yet another type just for the C# ABI
@@ -114,6 +115,20 @@ struct EntityHitConfirmed {
     inline static void FillMessageFrame(MessageFrame& frame)
     {
         frame.message_type = eEntityHitConfirmed;
+        frame.channel_id = 0;
+    }
+};
+
+
+// Vault Hunters co-op (2026-10-13): a relayed PlayerScriptEvent, or one the server generated
+// itself (e.g. "vh.session" party roster updates, sender = 0).
+struct EntityScriptEvent {
+    ScriptEventData data;
+    using serialize = zpp::bits::members<1>; // see ScriptEventData
+
+    inline static void FillMessageFrame(MessageFrame& frame)
+    {
+        frame.message_type = eEntityScriptEvent;
         frame.channel_id = 0;
     }
 };

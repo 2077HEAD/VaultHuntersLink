@@ -14,6 +14,10 @@
 #include <steam/steamnetworkingsockets.h>
 
 #include "Behavior.h"
+
+#ifndef _WIN32
+#define sscanf_s sscanf // MSVC-only name; the harness also builds on Linux (VH co-op CI)
+#endif
 #include "BotClient.h"
 
 namespace
@@ -42,6 +46,9 @@ struct Options
     float damagePerHit = 20.0f;  // claimed weapon damage per shot; forge it to test the server cap
     Vector3 aimTarget {};     // world point every bot aims at (yaw+pitch), instead of oscillating
     bool hasAimTarget = false;
+    float scriptEvery = 0.0f;   // Vault Hunters co-op: seconds between test script events; 0 = never
+    uint64_t avatarTdbid = 0;   // Vault Hunters co-op: class avatar record sent after joining
+    float avatarDelay = 0.0f;   // seconds after everyone is running before the avatar is sent
 };
 
 bool ParseArgs(const int argc, char** argv, Options& options)
@@ -152,6 +159,26 @@ bool ParseArgs(const int argc, char** argv, Options& options)
                 std::printf("weapon record \"%s\" -> tdbid %llu\n", value,
                             static_cast<unsigned long long>(options.weaponTdbid));
             }
+        }
+        else if (arg == "--script-every")
+        {
+            const auto value = next();
+            if (!value) return false;
+            options.scriptEvery = static_cast<float>(std::atof(value));
+        }
+        else if (arg == "--avatar")
+        {
+            const auto value = next();
+            if (!value) return false;
+            options.avatarTdbid = BotClient::TdbId(value);
+            std::printf("avatar record \"%s\" -> tdbid %llu\n", value,
+                        static_cast<unsigned long long>(options.avatarTdbid));
+        }
+        else if (arg == "--avatar-delay")
+        {
+            const auto value = next();
+            if (!value) return false;
+            options.avatarDelay = static_cast<float>(std::atof(value));
         }
         else if (arg == "--shoot-every")
         {
@@ -282,6 +309,9 @@ int main(const int argc, char** argv)
     float statsAccumulator = 0.0f;
     float jumpAccumulator = 0.0f;
     float shootAccumulator = 0.0f;
+    float scriptAccumulator = 0.0f;
+    bool avatarSent = false;
+    float avatarWait = 0.0f;
     auto lastTime = std::chrono::steady_clock::now();
 
     while (!g_stop)
@@ -328,6 +358,42 @@ int main(const int argc, char** argv)
                 for (const auto& bot : bots)
                 {
                     bot->SendShoot();
+                }
+            }
+        }
+
+        if (options.avatarTdbid != 0 && !avatarSent)
+        {
+            bool allRunning = true;
+            for (const auto& bot : bots)
+            {
+                allRunning = allRunning && bot->GetState() == BotClient::State::Running;
+            }
+            if (allRunning)
+            {
+                avatarWait += dt;
+            }
+            if (allRunning && avatarWait >= options.avatarDelay)
+            {
+                avatarSent = true;
+                for (const auto& bot : bots)
+                {
+                    bot->SendAvatar(options.avatarTdbid);
+                }
+            }
+        }
+
+        if (options.scriptEvery > 0.0f)
+        {
+            scriptAccumulator += dt;
+            if (scriptAccumulator >= options.scriptEvery)
+            {
+                scriptAccumulator = 0.0f;
+                for (const auto& bot : bots)
+                {
+                    char text[64];
+                    std::snprintf(text, sizeof(text), "hello from %s", bot->Name().c_str());
+                    bot->SendScriptEvent("vh.ping", text, 1.5f);
                 }
             }
         }

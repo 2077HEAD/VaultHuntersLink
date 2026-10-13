@@ -47,6 +47,9 @@ public class ServerConfig
 {
     private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
+    /// <summary>UDP port to listen on (Vault Hunters co-op: was hardcoded 1337). CLI: --port=N</summary>
+    public ushort Port { get; set; } = 1337;
+
     public InterestConfig Interest { get; set; } = new();
     public CombatConfig Combat { get; set; } = new();
 

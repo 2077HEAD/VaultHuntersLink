@@ -12,7 +12,15 @@ public class Program
         InitLogging();
         LogManager.GetCurrentClassLogger().Info("Starting Cyberverse Server 0.0.1 (c) 2023-2025 MeFisto94");
         var config = ServerConfig.Load(Path.Combine(AppContext.BaseDirectory, "config.json"));
-        var server = new GameServer(1337, config);
+        foreach (var arg in args)
+        {
+            if (arg.StartsWith("--port=") && ushort.TryParse(arg["--port=".Length..], out var port))
+            {
+                config.Port = port;
+            }
+        }
+        LogManager.GetCurrentClassLogger().Info($"Listening on UDP port {config.Port}");
+        var server = new GameServer(config.Port, config);
         AddTypicalPacketHandlers(server);
         
         var quit = false;
@@ -35,6 +43,7 @@ public class Program
         // TODO: Store the auth handler somewhere
         new AuthPacketHandler().RegisterOnServer(server);
         new PlayerPacketHandler().RegisterOnServer(server);
+        new CoopPacketHandler().RegisterOnServer(server); // Vault Hunters co-op
     }
     
     private static void InitLogging()

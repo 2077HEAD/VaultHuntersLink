@@ -15,6 +15,8 @@
 #include <RedLib.hpp>
 #include <clientbound/WorldPacketsClientBound.h>
 #include <map>
+#include <optional>
+#include <vector>
 #include <steam/isteamnetworkingsockets.h>
 #include <steam/steamnetworkingtypes.h>
 
@@ -104,8 +106,22 @@ private:
     // has returned -- same tick, but outside its call stack.
     std::vector<PlayerWasHit> m_pendingHitConfirms;
 
+    // Vault Hunters co-op (2026-10-13): outgoing script events and the avatar choice, flushed
+    // from OnNetworkUpdate after PollIncomingMessages() -- see m_pendingHitConfirms for why.
+    std::vector<PlayerScriptEvent> m_pendingScriptEvents;
+    std::optional<PlayerSetAvatar> m_pendingAvatar;
+
 public:
     void QueuePlayerWasHit(const PlayerWasHit& msg) { m_pendingHitConfirms.push_back(msg); }
+    void QueueScriptEvent(const PlayerScriptEvent& msg)
+    {
+        // A runaway redscript loop must not be able to flood the connection.
+        if (m_pendingScriptEvents.size() < 256)
+        {
+            m_pendingScriptEvents.push_back(msg);
+        }
+    }
+    void QueueAvatar(const PlayerSetAvatar& msg) { m_pendingAvatar = msg; }
 
 private:
 
@@ -175,5 +191,7 @@ template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerEquipI
 template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerShoot msg);
 template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerHealthUpdate msg);
 template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerWasHit msg);
+template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerScriptEvent msg);
+template bool NetworkGameSystem::EnqueueMessage(uint8_t channel_id, PlayerSetAvatar msg);
 
 #endif //NETWORKMANAGERCONTROLLER_H

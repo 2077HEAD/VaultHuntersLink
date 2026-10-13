@@ -6,6 +6,55 @@ public native class NetworkGameSystem extends IGameSystem {
     native let FullyConnected: Bool;
     native let playerActionTracker: ref<PlayerActionTracker>;
     public native func EnqueueLoadLastCheckpoint(handler: wref<inkISystemRequestsHandler>) -> Void;
+
+    // ---- Vault Hunters co-op (2026-10-13): generic script events, see ScriptEvents.reds ----
+    private let m_scriptEventListeners: array<ref<NetScriptEventListener>>;
+
+    public func RegisterScriptEventListener(listener: ref<NetScriptEventListener>) -> Void {
+        if IsDefined(listener) && !ArrayContains(this.m_scriptEventListeners, listener) {
+            ArrayPush(this.m_scriptEventListeners, listener);
+        }
+    }
+
+    public func UnregisterScriptEventListener(listener: ref<NetScriptEventListener>) -> Void {
+        ArrayRemove(this.m_scriptEventListeners, listener);
+    }
+
+    public func IsMultiplayerActive() -> Bool {
+        return this.FullyConnected;
+    }
+
+    public func SendScriptEvent(evt: ref<NetScriptEvent>) -> Void {
+        if !IsDefined(evt) || !this.FullyConnected {
+            return;
+        }
+        this.playerActionTracker.SendScriptEvent(evt.channel, evt.target, evt.u0, evt.u1, evt.u2, evt.f, evt.text);
+    }
+
+    public func SetAvatar(record: TweakDBID) -> Void {
+        // Queued natively until we are connected, so this is safe to call at any time.
+        this.playerActionTracker.SetAvatar(record);
+    }
+
+    // Called by the C++ client (NetworkGameSystem.cpp, eEntityScriptEvent) for every relayed event.
+    public func OnScriptEvent(channel: CName, sender: Int32, target: Int32, u0: Int64, u1: Int64, u2: Int64, f: array<Float>, text: String) -> Void {
+        let evt = new NetScriptEvent();
+        evt.channel = channel;
+        evt.sender = sender;
+        evt.target = target;
+        evt.u0 = u0;
+        evt.u1 = u1;
+        evt.u2 = u2;
+        evt.f = f;
+        evt.text = text;
+
+        // Iterate over a copy: a listener may (un)register listeners while handling the event.
+        let listeners = this.m_scriptEventListeners;
+        for listener in listeners {
+            listener.OnNetScriptEvent(evt);
+        }
+    }
+    // ---- end Vault Hunters co-op ----
     
     public func SpawnTransientEntity(entityName: TweakDBID, worldPosition: Vector4, worldOrientation: Quaternion) -> EntityID {
         let npcSpec = new DynamicEntitySpec();
@@ -23,6 +72,18 @@ public native class NetworkGameSystem extends IGameSystem {
         // 2026-07-16: TeleportationFacility no-ops on puppets, AITeleportCommand +
         // ForceTickNextFrame tracks at full speed).
         npcSpec.recordID = t"Character.choomlink_puppet";
+
+        // Vault Hunters co-op (2026-10-13): honour the server-sent record (the player's class
+        // avatar, PlayerSetAvatar) when -- and only when -- it is a record built for network
+        // puppets, i.e. one pointing at a stripped, AI-free template like puppet_base.ent.
+        // Such records carry the custom flat `vhNetworkPuppet: true` (see the Vault Hunters
+        // TweakXL files). Any other record (upstream's random story NPCs) would bring a full AI
+        // template that fights the network animation feed, so those keep the default puppet.
+        let puppetFlat = entityName;
+        TDBID.Append(puppetFlat, t".vhNetworkPuppet");
+        if TweakDBInterface.GetBool(puppetFlat, false) {
+            npcSpec.recordID = entityName;
+        }
 
         // Trust the server to properly track the entity state, because otherwise,
         // entities will just disappear for the client and never get back

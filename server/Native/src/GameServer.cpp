@@ -261,6 +261,8 @@ void GameServer::PollIncomingMessages()
             DESERIALIZE_RECV_QUEUE(ePlayerShoot, PlayerShoot)
             DESERIALIZE_RECV_QUEUE(ePlayerHealthUpdate, PlayerHealthUpdate)
             DESERIALIZE_RECV_QUEUE(ePlayerWasHit, PlayerWasHit)
+            DESERIALIZE_RECV_QUEUE(ePlayerScriptEvent, PlayerScriptEvent)
+            DESERIALIZE_RECV_QUEUE(ePlayerSetAvatar, PlayerSetAvatar)
             default:
                 printf("Unknown Message Type: %d\n", frame.message_type);
                 break;
@@ -344,6 +346,7 @@ void GameServer::ProcessSendQueue()
             SERIALIZE_SEND_QUEUE(eEntityShoot, EntityShoot)
             SERIALIZE_SEND_QUEUE(eEntityHealth, EntityHealth)
             SERIALIZE_SEND_QUEUE(eEntityHitConfirmed, EntityHitConfirmed)
+            SERIALIZE_SEND_QUEUE(eEntityScriptEvent, EntityScriptEvent)
             default:
                 printf("Unknown messageType: %d\n", val.messageType);
         }

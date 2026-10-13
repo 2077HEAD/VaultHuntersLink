@@ -298,9 +298,66 @@ void BotClient::HandleMessage(const void* data, const size_t size)
     }
     break;
 
+    case eEntityScriptEvent:
+    {
+        EntityScriptEvent evt = {};
+        if (zpp::bits::failure(in(evt)))
+        {
+            std::fprintf(stderr, "[%s] faulty packet: EntityScriptEvent\n", m_name.c_str());
+            return;
+        }
+        m_scriptEventsReceived++;
+        evt.data.text[sizeof(evt.data.text) - 1] = '\0';
+        if (evt.data.channel == ScriptEventChannel("vh.session"))
+        {
+            m_hostNetworkId = evt.data.u0;
+            m_selfNetworkId = evt.data.u2;
+            std::printf("[%s] session: host %llu, %llu member(s), me %llu, roster \"%s\"\n", m_name.c_str(),
+                        static_cast<unsigned long long>(evt.data.u0), static_cast<unsigned long long>(evt.data.u1),
+                        static_cast<unsigned long long>(evt.data.u2), evt.data.text);
+        }
+        else
+        {
+            std::printf("[%s] script event: channel %llx from %llu target %llu u0 %llu f0 %.2f text \"%s\"\n",
+                        m_name.c_str(), static_cast<unsigned long long>(evt.data.channel),
+                        static_cast<unsigned long long>(evt.data.sender),
+                        static_cast<unsigned long long>(evt.data.target),
+                        static_cast<unsigned long long>(evt.data.u0), evt.data.f[0], evt.data.text);
+        }
+    }
+    break;
+
     default:
         break;
     }
+}
+
+void BotClient::SendScriptEvent(const char* channel, const char* text, const float f0)
+{
+    if (m_state != State::Running)
+    {
+        return;
+    }
+
+    PlayerScriptEvent evt = {};
+    evt.data.channel = ScriptEventChannel(channel);
+    evt.data.sender = 0xDEADBEEF; // must be overwritten by the server
+    evt.data.u0 = static_cast<uint64_t>(m_index);
+    evt.data.f[0] = f0;
+    std::snprintf(evt.data.text, sizeof(evt.data.text), "%s", text);
+    Send(evt);
+}
+
+void BotClient::SendAvatar(const uint64_t recordId)
+{
+    if (m_state != State::Running)
+    {
+        return;
+    }
+
+    PlayerSetAvatar avatar = {};
+    avatar.recordId = recordId;
+    Send(avatar);
 }
 
 void BotClient::SendTick(const float dt)

@@ -38,6 +38,17 @@ public:
     void SendJump();         // PlayerActionTracked(jump) at the current position
     void SendShoot();        // PlayerShoot with the configured weapon at the current position
     void SendEquip();        // PlayerEquipItem drawing the configured weapon
+    // Vault Hunters co-op: a generic script event on `channel` (broadcast), and the class avatar.
+    void SendScriptEvent(const char* channel, const char* text, float f0);
+    void SendAvatar(uint64_t recordId);
+    uint64_t ConsumeScriptEventCount()
+    {
+        const auto count = m_scriptEventsReceived;
+        m_scriptEventsReceived = 0;
+        return count;
+    }
+    uint64_t SelfNetworkId() const { return m_selfNetworkId; }
+    uint64_t HostNetworkId() const { return m_hostNetworkId; }
     void Close(const char* reason);
 
     State GetState() const { return m_state; }
@@ -179,6 +190,9 @@ private:
     uint64_t m_shotsReceived = 0;
     uint64_t m_healthUpdatesReceived = 0;
     uint64_t m_hitConfirmsReceived = 0;
+    uint64_t m_scriptEventsReceived = 0;
+    uint64_t m_selfNetworkId = 0; // from vh.session
+    uint64_t m_hostNetworkId = 0; // from vh.session
     uint64_t m_weaponTdbid = 0;
     Vector3 m_aimTarget {};
     bool m_hasAimTarget = false;
