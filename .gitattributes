@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Windows launchers and their config must reach players with CRLF line endings.
+*.bat text eol=crlf
+tools/dist/templates/vaulthunters-coop.txt text eol=crlf
