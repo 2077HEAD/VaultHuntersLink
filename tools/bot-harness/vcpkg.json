@@ -3,6 +3,6 @@
   "name": "cyberverse-bot-harness",
   "version-string": "1.0",
   "description": "Headless fake-client harness that speaks the Cyberverse server protocol for sync/load testing",
-  "builtin-baseline": "f87344cac03158cbf1467264565f1fd36b382a24",
+  "builtin-baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
   "dependencies": [ "gamenetworkingsockets" ]
 }

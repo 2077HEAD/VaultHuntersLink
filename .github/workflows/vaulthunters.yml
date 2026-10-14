@@ -82,7 +82,7 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: '271a5b8850aa50f9a40269cbf3cf414b36e333d6'
+          vcpkgGitCommitId: '9e593bb18ea69cc5095e012465dcd675a822ed0d'
 
       - name: Build client plugin
         shell: pwsh
@@ -97,6 +97,19 @@ jobs:
           cmake -S server/Native -B server/Native/build -G Ninja -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
           cmake --build server/Native/build --config Release
+
+      - name: Show vcpkg logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $logs = @()
+          $logs += Get-ChildItem client/red4ext/build, server/Native/build -Recurse -Filter *.log -ErrorAction SilentlyContinue
+          $logs += Get-ChildItem "$env:VCPKG_ROOT/buildtrees" -Recurse -Filter *.log -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'err|out' }
+          foreach ($l in $logs) {
+            $tail = (Get-Content $l.FullName -Tail 40) -join '%0A'
+            if ($tail.Length -gt 3500) { $tail = $tail.Substring($tail.Length - 3500) }
+            Write-Output "::error title=$($l.Name)::$tail"
+          }
 
       - uses: actions/setup-dotnet@v4
         with:
