@@ -154,6 +154,9 @@ jobs:
             Copy-Item VAULTHUNTERS.md "$d/VaultHuntersLink-README.md"
           }
 
+          # debug/compiler builds of protobuf aren't used at runtime
+          Get-ChildItem out -Recurse -Include libprotobufd.dll, libprotobuf-lited.dll, libprotocd.dll, libprotoc.dll, *.pdb | Remove-Item -Force
+
           # Forward-slash entry names (see tools/dist/package-client.ps1 for why).
           Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
           foreach ($pair in @(@('out/client', 'VaultHuntersLink-Client.zip'), @('out/server', 'VaultHuntersLink-Server.zip'))) {
