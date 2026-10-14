@@ -9,7 +9,7 @@ name: Vault Hunters Link
 
 on:
   push:
-    branches: [ "vaulthunters", "main", "master" ]
+    branches: [ "vaulthunters", "main", "master", "release" ]
     tags: [ "v*" ]
   pull_request:
   workflow_dispatch:
@@ -119,6 +119,10 @@ jobs:
         shell: pwsh
         run: dotnet publish server/Managed -c Release -r win-x64 --self-contained true -o out/server/VaultHuntersServer
 
+      - name: Read version
+        shell: pwsh
+        run: "VH_VERSION=$((Get-Content tools/dist/VERSION -Raw).Trim())" >> $env:GITHUB_ENV
+
       - name: Assemble zips
         shell: pwsh
         run: |
@@ -169,7 +173,10 @@ jobs:
           path: VaultHuntersLink-*.zip
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/release'
         uses: softprops/action-gh-release@v2
         with:
+          # pushing the release branch publishes the version in tools/dist/VERSION
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v{0}', env.VH_VERSION) }}
+          target_commitish: ${{ github.sha }}
           files: VaultHuntersLink-*.zip
