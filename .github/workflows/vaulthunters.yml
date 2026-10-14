@@ -132,7 +132,7 @@ jobs:
 
           # ---- server ----
           $srv = 'out/server/VaultHuntersServer'
-          Get-ChildItem server/Native/build -Recurse -Filter *.dll | Copy-Item -Destination $srv -Force
+          Get-ChildItem server/Native/build -Recurse -Filter *.dll | Where-Object { $_.FullName -notmatch '[\\/]debug[\\/]' } | Copy-Item -Destination $srv -Force
           if (-not (Test-Path "$srv/Cyberverse.Server.Native.dll")) { throw 'native server DLL missing' }
           if (-not (Test-Path "$srv/Cyberverse.Server.exe")) { throw 'server exe missing' }
           Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Host.bat' out/server/
@@ -141,7 +141,7 @@ jobs:
           $cli = 'out/client'
           $plugin = "$cli/red4ext/plugins/Cyberverse"
           New-Item -ItemType Directory -Force -Path $plugin, "$cli/r6/scripts/Cyberverse", "$cli/archive/pc/mod", "$cli/r6/tweaks/VaultHuntersLink" | Out-Null
-          Get-ChildItem client/red4ext/build/ninja-vcpkg -Recurse -Filter *.dll | Copy-Item -Destination $plugin -Force
+          Get-ChildItem client/red4ext/build/ninja-vcpkg -Recurse -Filter *.dll | Where-Object { $_.FullName -notmatch '[\\/]debug[\\/]' } | Copy-Item -Destination $plugin -Force
           if (-not (Test-Path "$plugin/Cyberverse.Red4Ext.dll")) { throw 'client plugin DLL missing' }
           Copy-Item -Path client/RedscriptModule/src/* -Destination "$cli/r6/scripts/Cyberverse" -Recurse
           Copy-Item client/assets/choomlink_puppet.archive "$cli/archive/pc/mod/"
@@ -153,6 +153,10 @@ jobs:
             Copy-Item LICENSE "$d/VaultHuntersLink-LICENSE.txt"
             Copy-Item VAULTHUNTERS.md "$d/VaultHuntersLink-README.md"
           }
+
+          # nothing a player gets may need Visual Studio's debug runtime
+          $bad = Get-ChildItem out -Recurse -Filter *.dll | Where-Object { (Select-String -Path $_.FullName -Pattern 'VCRUNTIME140D.dll|ucrtbased.dll' -SimpleMatch -Quiet) }
+          if ($bad) { throw ('debug-runtime DLLs packaged: ' + ($bad.Name -join ', ')) }
 
           # debug/compiler builds of protobuf aren't used at runtime
           Get-ChildItem out -Recurse -Include libprotobufd.dll, libprotobuf-lited.dll, libprotocd.dll, libprotoc.dll, *.pdb | Remove-Item -Force
