@@ -121,7 +121,8 @@ jobs:
 
       - name: Read version
         shell: pwsh
-        run: "VH_VERSION=$((Get-Content tools/dist/VERSION -Raw).Trim())" >> $env:GITHUB_ENV
+        run: |
+          "VH_VERSION=$((Get-Content tools/dist/VERSION -Raw).Trim())" >> $env:GITHUB_ENV
 
       - name: Assemble zips
         shell: pwsh
