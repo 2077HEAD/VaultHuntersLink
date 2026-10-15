@@ -40,6 +40,8 @@ public:
     void SendEquip();        // PlayerEquipItem drawing the configured weapon
     // Vault Hunters co-op: a generic script event on `channel` (broadcast), and the class avatar.
     void SendScriptEvent(const char* channel, const char* text, float f0);
+    // Vault Hunters: announce a class (vh.class, u0 = class index 1..6) like a real player does.
+    void SendClass(uint64_t classIndex);
     void SendAvatar(uint64_t recordId);
     uint64_t ConsumeScriptEventCount()
     {

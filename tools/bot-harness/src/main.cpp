@@ -46,6 +46,7 @@ struct Options
     float damagePerHit = 20.0f;  // claimed weapon damage per shot; forge it to test the server cap
     Vector3 aimTarget {};     // world point every bot aims at (yaw+pitch), instead of oscillating
     bool hasAimTarget = false;
+    int vhClass = -1;           // Vault Hunters class each bot announces: 1..6, 0 = a different one per bot, -1 = none
     float scriptEvery = 0.0f;   // Vault Hunters co-op: seconds between test script events; 0 = never
     uint64_t avatarTdbid = 0;   // Vault Hunters co-op: class avatar record sent after joining
     float avatarDelay = 0.0f;   // seconds after everyone is running before the avatar is sent
@@ -160,6 +161,12 @@ bool ParseArgs(const int argc, char** argv, Options& options)
                             static_cast<unsigned long long>(options.weaponTdbid));
             }
         }
+        else if (arg == "--vh-class")
+        {
+            const char* value = next();
+            if (!value) return false;
+            options.vhClass = std::atoi(value);
+        }
         else if (arg == "--script-every")
         {
             const auto value = next();
@@ -225,7 +232,8 @@ bool ParseArgs(const int argc, char** argv, Options& options)
                          "                   [--shoot-every <seconds, needs --weapon>] [--equip-delay <seconds>]\n"
                          "                   [--damage <claimed damage per hit, default 20; forge it to test the server cap>]\n"
                          "                   [--bleed <percent per second, exercises the health pipeline>]\n"
-                         "                   [--aim-at x,y,z  aim yaw+pitch at a world point instead of oscillating]\n");
+                         "                   [--aim-at x,y,z  aim yaw+pitch at a world point instead of oscillating]\n"
+                         "                   [--vh-class <1-6, or 0 = a different class per bot>]\n");
             return false;
         }
     }
@@ -310,6 +318,7 @@ int main(const int argc, char** argv)
     float jumpAccumulator = 0.0f;
     float shootAccumulator = 0.0f;
     float scriptAccumulator = 0.0f;
+    float classAccumulator = 4.0f; // first announce ~1 s after start
     bool avatarSent = false;
     float avatarWait = 0.0f;
     auto lastTime = std::chrono::steady_clock::now();
@@ -379,6 +388,24 @@ int main(const int argc, char** argv)
                 for (const auto& bot : bots)
                 {
                     bot->SendAvatar(options.avatarTdbid);
+                }
+            }
+        }
+
+        // Re-announced every few seconds so a player who joins later still learns it (the game
+        // only shows a message when a class actually changes).
+        if (options.vhClass >= 0)
+        {
+            classAccumulator += dt;
+            if (classAccumulator >= 5.0f)
+            {
+                classAccumulator = 0.0f;
+                int i = 0;
+                for (const auto& bot : bots)
+                {
+                    const int cls = options.vhClass > 0 ? options.vhClass : (i % 6) + 1;
+                    bot->SendClass(static_cast<uint64_t>(cls));
+                    i++;
                 }
             }
         }

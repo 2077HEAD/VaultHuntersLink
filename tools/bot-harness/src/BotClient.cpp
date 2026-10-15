@@ -348,6 +348,20 @@ void BotClient::SendScriptEvent(const char* channel, const char* text, const flo
     Send(evt);
 }
 
+void BotClient::SendClass(const uint64_t classIndex)
+{
+    if (m_state != State::Running)
+    {
+        return;
+    }
+
+    PlayerScriptEvent evt = {};
+    evt.data.channel = ScriptEventChannel("vh.class");
+    evt.data.sender = 0xDEADBEEF; // must be overwritten by the server
+    evt.data.u0 = classIndex;
+    Send(evt);
+}
+
 void BotClient::SendAvatar(const uint64_t recordId)
 {
     if (m_state != State::Running)

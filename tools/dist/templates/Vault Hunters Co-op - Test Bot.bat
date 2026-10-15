@@ -27,7 +27,7 @@ if not exist "VaultHuntersServer\bot-harness.exe" goto :nobot
 
 echo Sending %BOTS% test player(s) to %SPOT% on port %PORT% ...
 echo Close this window to make them leave.
-"VaultHuntersServer\bot-harness.exe" --server 127.0.0.1 --port %PORT% --count %BOTS% --pattern circle --center %SPOT% --hz 20 --jump-every 8
+"VaultHuntersServer\bot-harness.exe" --server 127.0.0.1 --port %PORT% --count %BOTS% --pattern circle --center %SPOT% --hz 20 --jump-every 8 --vh-class 0
 pause
 exit /b 0
 
