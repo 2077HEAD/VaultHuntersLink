@@ -149,23 +149,24 @@ void BotClient::HandleMessage(const void* data, const size_t size)
 
         if (result.auth_result == EAuthResult_Ok)
         {
-            const auto [position, yaw, pitch] = m_behavior.Spawn();
-            std::printf("[%s] login accepted, joining world at (%.1f, %.1f, %.1f)\n", m_name.c_str(), position.x,
-                        position.y, position.z);
+            // Always tell the lobby we are a (ready) test bot, so a bot never becomes the host.
+            PlayerScriptEvent state = {};
+            state.data.channel = ScriptEventChannel("vh.lobby.state");
+            state.data.sender = 0xDEADBEEF;
+            state.data.u0 = 1; // ready
+            state.data.u1 = static_cast<uint64_t>(m_lobbyClass);
+            state.data.u2 = 1; // test bot
+            Send(state);
 
-            PlayerJoinWorld join = {};
-            join.position = position;
-            if (Send(join))
+            if (m_lobbyWait)
             {
-                m_state = State::Running;
-
-                // Weapon sync: draw the configured weapon after joining (immediately, or after
-                // m_equipDelay seconds — see SendTick). Same reliable stream as the join packet,
-                // so the server sees the puppet first.
-                if (m_weaponTdbid != 0 && m_equipDelay <= 0.0f)
-                {
-                    SendEquip();
-                }
+                // Then wait for vh.lobby.go (or a "session already running" roster).
+                std::printf("[%s] login accepted, waiting in the lobby\n", m_name.c_str());
+                m_state = State::Lobby;
+            }
+            else
+            {
+                JoinWorld();
             }
         }
         else
@@ -308,7 +309,30 @@ void BotClient::HandleMessage(const void* data, const size_t size)
         }
         m_scriptEventsReceived++;
         evt.data.text[sizeof(evt.data.text) - 1] = '\0';
-        if (evt.data.channel == ScriptEventChannel("vh.session"))
+        if (evt.data.channel == ScriptEventChannel("vh.lobby"))
+        {
+            // U1 = 1 once the host is playing: a bot that is still waiting just goes in.
+            if (m_state == State::Lobby && evt.data.u1 != 0)
+            {
+                JoinWorld();
+            }
+        }
+        else if (evt.data.channel == ScriptEventChannel("vh.lobby.go"))
+        {
+            if (m_state == State::Lobby)
+            {
+                std::printf("[%s] the host started the session\n", m_name.c_str());
+                JoinWorld();
+            }
+        }
+        else if (evt.data.channel == ScriptEventChannel("vh.where"))
+        {
+            if (m_followHost && evt.data.sender == m_hostNetworkId && m_hostNetworkId != 0)
+            {
+                m_behavior.SetCenter({ evt.data.f[0], evt.data.f[1], evt.data.f[2] });
+            }
+        }
+        else if (evt.data.channel == ScriptEventChannel("vh.session"))
         {
             m_hostNetworkId = evt.data.u0;
             m_selfNetworkId = evt.data.u2;
@@ -346,6 +370,27 @@ void BotClient::SendScriptEvent(const char* channel, const char* text, const flo
     evt.data.f[0] = f0;
     std::snprintf(evt.data.text, sizeof(evt.data.text), "%s", text);
     Send(evt);
+}
+
+void BotClient::JoinWorld()
+{
+    const auto [position, yaw, pitch] = m_behavior.Spawn();
+    std::printf("[%s] joining world at (%.1f, %.1f, %.1f)\n", m_name.c_str(), position.x, position.y, position.z);
+
+    PlayerJoinWorld join = {};
+    join.position = position;
+    if (Send(join))
+    {
+        m_state = State::Running;
+
+        // Weapon sync: draw the configured weapon after joining (immediately, or after
+        // m_equipDelay seconds — see SendTick). Same reliable stream as the join packet,
+        // so the server sees the puppet first.
+        if (m_weaponTdbid != 0 && m_equipDelay <= 0.0f)
+        {
+            SendEquip();
+        }
+    }
 }
 
 void BotClient::SendClass(const uint64_t classIndex)

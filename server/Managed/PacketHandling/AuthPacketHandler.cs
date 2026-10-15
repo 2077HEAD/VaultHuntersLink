@@ -45,6 +45,13 @@ public class AuthPacketHandler
             
         outputMessage.MarshalFrom(resultPacket);
         server.EnqueueMessage(outputMessage);
+
+        // After the result, so the client is signed in when the lobby roster arrives.
+        if (resultPacket.auth_result == EAuthResult.Ok
+            && _players!.ConnectedPlayers.TryGetValue(connectionId, out var signedIn))
+        {
+            server.RaisePlayerAuthenticated(signedIn);
+        }
     }
 
     public virtual void RegisterOnServer(GameServer server)

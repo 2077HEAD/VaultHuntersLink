@@ -46,7 +46,9 @@ struct Options
     float damagePerHit = 20.0f;  // claimed weapon damage per shot; forge it to test the server cap
     Vector3 aimTarget {};     // world point every bot aims at (yaw+pitch), instead of oscillating
     bool hasAimTarget = false;
-    int vhClass = -1;           // Vault Hunters class each bot announces: 1..6, 0 = a different one per bot, -1 = none
+    int vhClass = -1;
+    bool lobby = false;        // wait in the Vault Hunters lobby until the host starts
+    bool followHost = false;   // circle the party host (vh.where) instead of --center           // Vault Hunters class each bot announces: 1..6, 0 = a different one per bot, -1 = none
     float scriptEvery = 0.0f;   // Vault Hunters co-op: seconds between test script events; 0 = never
     uint64_t avatarTdbid = 0;   // Vault Hunters co-op: class avatar record sent after joining
     float avatarDelay = 0.0f;   // seconds after everyone is running before the avatar is sent
@@ -161,6 +163,14 @@ bool ParseArgs(const int argc, char** argv, Options& options)
                             static_cast<unsigned long long>(options.weaponTdbid));
             }
         }
+        else if (arg == "--lobby")
+        {
+            options.lobby = true;
+        }
+        else if (arg == "--follow-host")
+        {
+            options.followHost = true;
+        }
         else if (arg == "--vh-class")
         {
             const char* value = next();
@@ -233,7 +243,7 @@ bool ParseArgs(const int argc, char** argv, Options& options)
                          "                   [--damage <claimed damage per hit, default 20; forge it to test the server cap>]\n"
                          "                   [--bleed <percent per second, exercises the health pipeline>]\n"
                          "                   [--aim-at x,y,z  aim yaw+pitch at a world point instead of oscillating]\n"
-                         "                   [--vh-class <1-6, or 0 = a different class per bot>]\n");
+                         "                   [--vh-class <1-6, or 0 = a different class per bot>] [--lobby] [--follow-host]\n");
             return false;
         }
     }
@@ -304,6 +314,8 @@ int main(const int argc, char** argv)
         bot->SetWeapon(options.weaponTdbid, options.equipDelay);
         bot->SetBleedRate(options.bleedRate);
         bot->SetDamagePerHit(options.damagePerHit);
+        bot->SetLobby(options.lobby, options.vhClass > 0 ? options.vhClass : (options.vhClass == 0 ? (i % 6) + 1 : 0));
+        bot->SetFollowHost(options.followHost);
         if (options.hasAimTarget)
         {
             bot->SetAimTarget(options.aimTarget);

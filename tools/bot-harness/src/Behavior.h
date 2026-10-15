@@ -63,6 +63,12 @@ public:
         m_heading = m_angle;
     }
 
+    // Vault Hunters: follow a moving point (the host, from "vh.where").
+    void SetCenter(const Vector3 center)
+    {
+        m_center = center;
+    }
+
     Pose Spawn() const
     {
         return { m_position, 0.0f };

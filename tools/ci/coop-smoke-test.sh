@@ -5,6 +5,7 @@
 #   1. three bots join -> every bot must receive a vh.session roster naming the first one host
 #   2. bots exchange script events -> each must receive the others' events, sender stamped
 #   3. a bot sends its class avatar -> the others must see that puppet respawn with the record
+#   4. lobby: bots started with --lobby sign in and wait on the main-menu lobby (no host -> no start)
 # Exits non-zero on the first failed expectation.
 #
 # Usage: coop-smoke-test.sh <server-out-dir> <bot-harness-binary> [port]
@@ -41,4 +42,11 @@ JUDY=$(grep -o 'avatar record "Character.Judy" -> tdbid [0-9]*' "$LOG_DIR/bots.l
 [ -n "$JUDY" ] || fail "harness did not report the avatar tdbid"
 grep -q "peer entity spawned: networkId [0-9]* (record $JUDY)" "$LOG_DIR/bots.log" || fail "no puppet respawned with the avatar record"
 
-echo "PASS: roster, relay, sender stamping and avatar respawn"
+timeout -s INT 6 "$BOT" --server 127.0.0.1 --port "$PORT" --count 2 --pattern static --lobby --vh-class 0 \
+    > "$LOG_DIR/lobby.log" 2>&1 || true
+n=$(grep -c "waiting in the lobby" "$LOG_DIR/lobby.log" || true)
+[ "$n" -eq 2 ] || { cat "$LOG_DIR/lobby.log"; fail "expected 2 bots waiting in the lobby, got $n"; }
+grep -q "joining world" "$LOG_DIR/lobby.log" && { cat "$LOG_DIR/lobby.log"; fail "a lobby bot joined the world without a start"; }
+grep -q "Co-op lobby: Bot01 signed in" "$LOG_DIR/server.log" || fail "server did not track lobby sign-ins"
+
+echo "PASS: roster, relay, sender stamping, avatar respawn and lobby"

@@ -2,10 +2,10 @@
 rem Vault Hunters Co-op: SOLO TEST. Adds fake players to YOUR server so you can see co-op
 rem working without a second PC.
 rem
-rem   1. Run "Vault Hunters Co-op - Host.bat" and load a save.
-rem   2. In the Vault Hunters window (CET overlay) click "Save my spot for the test bot".
-rem   3. Run this file. Fake players walk in circles around the saved spot.
-rem      Close this window to make them leave.
+rem   Run this while hosting (or use "Vault Hunters Co-op - Host + Test Bots.bat").
+rem   The bots join the main-menu lobby as ready players. Once the host is in the game
+rem   they load in and walk in circles around the host, following them around.
+rem   Close this window to make them leave.
 rem
 rem Optional: drag nothing, just edit BOTS below (1-3; you are the 4th).
 
@@ -19,15 +19,25 @@ if exist "vaulthunters-coop.txt" (
     )
 )
 
+rem Where the bots appear before they find the host (a spot saved from the Vault Hunters
+rem window, if there is one).
+set "SPOT=0,0,0"
 set "SPOTFILE=bin\x64\plugins\cyber_engine_tweaks\mods\VaultHunters\testbot_position.txt"
-if not exist "%SPOTFILE%" goto :nospot
-set /p SPOT=<"%SPOTFILE%"
+if exist "%SPOTFILE%" set /p SPOT=<"%SPOTFILE%"
 
 if not exist "VaultHuntersServer\vh-testbot.exe" goto :nobot
 
-echo Sending %BOTS% test player(s) to %SPOT% on port %PORT% ...
+echo Sending %BOTS% test player(s) to the co-op lobby on port %PORT% ...
 echo Close this window to make them leave.
-"VaultHuntersServer\vh-testbot.exe" --server 127.0.0.1 --port %PORT% --count %BOTS% --pattern circle --center %SPOT% --hz 20 --jump-every 8 --vh-class 0
+"VaultHuntersServer\vh-testbot.exe" --server 127.0.0.1 --port %PORT% --count %BOTS% --pattern circle --center %SPOT% --hz 20 --jump-every 8 --vh-class 0 --lobby --follow-host
+pause
+exit /b 0
+
+:nobot
+
+echo Sending %BOTS% test player(s) to the co-op lobby on port %PORT% ...
+echo Close this window to make them leave.
+"VaultHuntersServer\vh-testbot.exe" --server 127.0.0.1 --port %PORT% --count %BOTS% --pattern circle --center %SPOT% --hz 20 --jump-every 8 --vh-class 0 --lobby --follow-host
 pause
 exit /b 0
 

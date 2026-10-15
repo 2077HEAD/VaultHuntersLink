@@ -26,6 +26,11 @@ public class GameServer: NativeGameServer, IPacketSink
 
     public void RaisePlayerJoinedWorld(Player player) => PlayerJoinedWorld?.Invoke(player);
 
+    /// <summary>Vault Hunters co-op: raised after a player signed in (still on the main menu).</summary>
+    public event Action<Player>? PlayerAuthenticated;
+
+    public void RaisePlayerAuthenticated(Player player) => PlayerAuthenticated?.Invoke(player);
+
     public GameServer(ushort listeningPort, ServerConfig config) : base(listeningPort)
     {
         Config = config;

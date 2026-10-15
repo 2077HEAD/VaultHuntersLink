@@ -25,6 +25,7 @@ public:
         Connecting,
         Authenticating,
         Joining,
+        Lobby,   // Vault Hunters: signed in, waiting on the main-menu lobby for the host's START
         Running,
         Dead,
     };
@@ -43,6 +44,10 @@ public:
     // Vault Hunters: announce a class (vh.class, u0 = class index 1..6) like a real player does.
     void SendClass(uint64_t classIndex);
     void SendAvatar(uint64_t recordId);
+    // Vault Hunters lobby: wait (ready, announcing `lobbyClass`) until the host starts the session.
+    void SetLobby(bool wait, int lobbyClass) { m_lobbyWait = wait; m_lobbyClass = lobbyClass; }
+    // Vault Hunters: circle the party host instead of a fixed point (needs "vh.where").
+    void SetFollowHost(bool follow) { m_followHost = follow; }
     uint64_t ConsumeScriptEventCount()
     {
         const auto count = m_scriptEventsReceived;
@@ -150,6 +155,7 @@ public:
 
 private:
     void OnConnected();
+    void JoinWorld();
     void HandleMessage(const void* data, size_t size);
 
     // Identical framing to the real client (NetworkGameSystem::EnqueueMessage):
@@ -196,6 +202,9 @@ private:
     uint64_t m_selfNetworkId = 0; // from vh.session
     uint64_t m_hostNetworkId = 0; // from vh.session
     uint64_t m_weaponTdbid = 0;
+    bool m_lobbyWait = false;
+    int m_lobbyClass = 0;
+    bool m_followHost = false;
     Vector3 m_aimTarget {};
     bool m_hasAimTarget = false;
     float m_bleedRate = 0.0f;      // percent per second, 0 = don't report health at all

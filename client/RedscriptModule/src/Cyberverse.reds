@@ -1,41 +1,9 @@
 import Cyberverse.Network.Managers.*
 //import Codeware.*
 
-@addField(DebugDataDef)
-public let AutoContinueUsed: Bool;
-
-@wrapMethod(SingleplayerMenuGameController)
-protected cb func OnSavesForLoadReady(saves: array<String>) -> Bool {
-	let res = wrappedMethod(saves);
-
-    let handler = this.GetSystemRequestsHandler();
-    if (!handler.IsPreGame()) {
-        return res; // PreGame == MainMenu
-    }
-
-    // TODO: In case the connection is too slow, we miss this. What to do then? Should the DLL somehow check the saves and then LoadLastCheckpoint?
-    //  technically, it could still hook this method. Or put hooking aside, we could call into it and even pass the SystemRequestsHandler.
-	if this.m_savesCount > 0 && !GetAllBlackboardDefs().DebugData.AutoContinueUsed {
-        let networkSystem = GameInstance.GetNetworkGameSystem();
-        if (networkSystem.FullyConnected) {
-		    handler.LoadLastCheckpoint(false);
-        } else {
-            networkSystem.EnqueueLoadLastCheckpoint(handler);
-        }
-	}
-}
-
-@wrapMethod(SingleplayerMenuGameController)
-protected cb func OnUninitialize() -> Bool {
-	wrappedMethod();
-	GetAllBlackboardDefs().DebugData.AutoContinueUsed = true;
-}
-
-@wrapMethod(SingleplayerMenuGameController)
-private func PopulateMenuItemList() -> Void {
-    wrappedMethod();
-    this.AddMenuItem("Server-Browser", n"OnBuyGame");
-}
+// Vault Hunters Link: the client used to load the last checkpoint as soon as the server accepted
+// the login, skipping the main menu. Removed: the main menu now hosts the co-op lobby (Vault
+// Hunters mod, Coop/Lobby.reds), where the host starts the session for everyone at once.
 
 @wrapMethod(PlayerPuppet)
 protected cb func OnAction(action: ListenerAction, consumer: ListenerActionConsumer) -> Bool {

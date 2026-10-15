@@ -159,6 +159,7 @@ jobs:
           Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Host.bat' out/server/
           Copy-Item tools/bot-harness/build/bot-harness.exe "$srv/vh-testbot.exe"
           Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Test Bot.bat' out/server/
+          Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Host + Test Bots.bat' out/server/
 
           # ---- client ----
           $cli = 'out/client'
