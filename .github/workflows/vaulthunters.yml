@@ -179,6 +179,7 @@ jobs:
           Copy-Item client/assets/choomlink/choomlink.yaml "$cli/r6/tweaks/VaultHuntersLink/"
           Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Join.bat' $cli
           Copy-Item 'out/launcher/Vault Hunters Launcher.exe' $cli
+          foreach ($t in @('VH-ModCleanup.ps1', 'VH Clean Up Mods.bat', 'VH Restore Disabled Mods.bat', 'VH Check Install.bat')) { Copy-Item "tools/dist/templates/$t" $cli }
           Copy-Item tools/launcher/ui/Bangers-OFL.txt "$cli/VaultHuntersLauncher-Fonts-OFL.txt"
           $cfg = (Get-Content tools/dist/templates/vaulthunters-coop.txt -Raw).Replace('@SERVER_ADDRESS@', '127.0.0.1').Replace('@SERVER_PORT@', '1337')
           [System.IO.File]::WriteAllText("$cli/vaulthunters-coop.txt", $cfg, $utf8NoBom)

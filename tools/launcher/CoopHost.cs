@@ -27,6 +27,7 @@ public sealed class CoopHost : IDisposable
 
     public string InviteCode { get; private set; } = "";
     public string LanCode { get; private set; } = "";
+    public string TailscaleCode { get; private set; } = "";
     public bool Running => _server is { HasExited: false };
 
     private readonly string _gameFolder;
@@ -56,6 +57,8 @@ public sealed class CoopHost : IDisposable
 
         var lan = LocalAddress();
         LanCode = lan != null ? VaultHuntersLauncher.InviteCode.Encode(lan, _port) : "";
+        var ts = TailscaleAddress();
+        TailscaleCode = ts != null ? VaultHuntersLauncher.InviteCode.Encode(ts, _port) : "";
         Changed?.Invoke();
 
         IPAddress? routerPublic = null;
@@ -289,6 +292,22 @@ public sealed class CoopHost : IDisposable
         return null;
     }
 
+    /// <summary>This PC's Tailscale address (100.64.0.0/10), when Tailscale is running.</summary>
+    public static IPAddress? TailscaleAddress()
+    {
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (nic.OperationalStatus != OperationalStatus.Up) continue;
+            foreach (var a in nic.GetIPProperties().UnicastAddresses)
+            {
+                if (a.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                var b = a.Address.GetAddressBytes();
+                if (b[0] == 100 && b[1] >= 64 && b[1] <= 127) return a.Address;
+            }
+        }
+        return null;
+    }
+
     // ---------- stopping ----------
 
     public void Stop()
@@ -313,7 +332,7 @@ public sealed class CoopHost : IDisposable
         _mapping = null;
         ServerState = RouterState = InternetState = Check.Pending;
         ServerText = RouterText = InternetText = "Not started";
-        InviteCode = LanCode = "";
+        InviteCode = LanCode = TailscaleCode = "";
         Changed?.Invoke();
     }
 

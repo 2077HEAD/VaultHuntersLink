@@ -111,6 +111,7 @@ public sealed class MainForm : Form
             internet = new { state = (h?.InternetState ?? CoopHost.Check.Pending).ToString().ToLowerInvariant(), text = h?.InternetText ?? "Not started" },
             invite = h?.InviteCode ?? "",
             lan = h?.LanCode ?? "",
+            tailscale = h?.TailscaleCode ?? "",
         });
     }
 
@@ -191,11 +192,32 @@ public sealed class MainForm : Form
                 Clipboard.SetText(args?["text"]?.GetValue<string>() ?? "");
                 return null;
 
+            case "mods":
+                return RunModsTool(args?["action"]?.GetValue<string>() ?? "check");
+
             case "openFolder":
                 Process.Start(new ProcessStartInfo("explorer.exe", $"\"{_gameFolder}\"") { UseShellExecute = true });
                 return null;
         }
         throw new InvalidOperationException("Unknown command " + cmd);
+    }
+
+    // The mod cleanup tool (VH-ModCleanup.ps1 via its .bat files, which ask for admin rights
+    // themselves). Opens in its own window so people can read what it did.
+    private object? RunModsTool(string action)
+    {
+        var bat = action switch
+        {
+            "aside" => "VH Clean Up Mods.bat",
+            "restore" => "VH Restore Disabled Mods.bat",
+            _ => "VH Check Install.bat",
+        };
+        var path = Path.Combine(_gameFolder, bat);
+        if (!File.Exists(path)) throw new InvalidOperationException(bat + " isn't in your game folder. Unpack VaultHuntersLink-Client.zip there again.");
+        if (action != "check" && Process.GetProcessesByName("Cyberpunk2077").Length > 0)
+            throw new InvalidOperationException("Close Cyberpunk 2077 first.");
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true, WorkingDirectory = _gameFolder });
+        return null;
     }
 
     private object Launch(string mode, string? code)
