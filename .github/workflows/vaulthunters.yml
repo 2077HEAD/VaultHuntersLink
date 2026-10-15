@@ -70,7 +70,9 @@ jobs:
   build-windows:
     runs-on: windows-latest
     env:
-      VCPKG_DEFAULT_TRIPLET: x64-windows
+      VCPKG_DEFAULT_TRIPLET: x64-windows-release
+      VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-release
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-bincache
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,6 +80,17 @@ jobs:
 
       - uses: ilammy/msvc-dev-cmd@v1
       - uses: lukka/get-cmake@latest
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-bincache
+          key: vcpkg-${{ hashFiles('client/red4ext/vcpkg.json') }}-x64-windows-release-v1
+          restore-keys: vcpkg-
+
+      - name: Make vcpkg cache folder
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path vcpkg-bincache | Out-Null
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -88,14 +101,14 @@ jobs:
         shell: pwsh
         run: |
           cmake -S client/red4ext -B client/red4ext/build/ninja-vcpkg -G Ninja -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-release
           cmake --build client/red4ext/build/ninja-vcpkg --config Release
 
       - name: Build native server
         shell: pwsh
         run: |
           cmake -S server/Native -B server/Native/build -G Ninja -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-release
           cmake --build server/Native/build --config Release
 
       - name: Show vcpkg logs on failure
@@ -110,6 +123,14 @@ jobs:
             if ($tail.Length -gt 3500) { $tail = $tail.Substring($tail.Length - 3500) }
             Write-Output "::error title=$($l.Name)::$tail"
           }
+
+      - name: Build test bot (reuses the server's vcpkg packages)
+        shell: pwsh
+        run: |
+          cmake -S tools/bot-harness -B tools/bot-harness/build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-release `
+            -DVCPKG_INSTALLED_DIR="$PWD/server/Native/build/vcpkg_installed"
+          cmake --build tools/bot-harness/build --config Release
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -136,6 +157,8 @@ jobs:
           if (-not (Test-Path "$srv/Cyberverse.Server.Native.dll")) { throw 'native server DLL missing' }
           if (-not (Test-Path "$srv/Cyberverse.Server.exe")) { throw 'server exe missing' }
           Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Host.bat' out/server/
+          Copy-Item tools/bot-harness/build/bot-harness.exe $srv
+          Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Test Bot.bat' out/server/
 
           # ---- client ----
           $cli = 'out/client'
