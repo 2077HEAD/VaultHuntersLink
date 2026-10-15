@@ -33,11 +33,11 @@ if exist "VaultHuntersServer\_update\" (
     robocopy "VaultHuntersServer\_update" "VaultHuntersServer" /MOVE /R:1 /W:1 /NFL /NDL /NJH /NJS >nul
     if exist "VaultHuntersServer\_update\" (
         echo.
-        echo   Could not apply the update. Close any open co-op server or test bot windows, then
-        echo   right-click this file and choose "Run as administrator" once.
+        echo   Note: could not apply a pending update in VaultHuntersServer\_update.
+        echo   If co-op misbehaves, close all co-op windows and run this file once with
+        echo   right-click - "Run as administrator". Starting anyway ...
         echo.
-        pause
-        exit /b 1
+        timeout /t 5 >nul
     )
 )
 
