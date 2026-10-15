@@ -7,11 +7,11 @@ rem   2. In the Vault Hunters window (CET overlay) click "Save my spot for the t
 rem   3. Run this file. Fake players walk in circles around the saved spot.
 rem      Close this window to make them leave.
 rem
-rem Optional: drag nothing, just edit BOTS below (1-4).
+rem Optional: drag nothing, just edit BOTS below (1-3; you are the 4th).
 
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
-set "BOTS=1"
+set "BOTS=3"
 set "PORT=1337"
 if exist "vaulthunters-coop.txt" (
     for /f "usebackq eol=# tokens=1,2 delims==" %%a in ("vaulthunters-coop.txt") do (
@@ -23,11 +23,11 @@ set "SPOTFILE=bin\x64\plugins\cyber_engine_tweaks\mods\VaultHunters\testbot_posi
 if not exist "%SPOTFILE%" goto :nospot
 set /p SPOT=<"%SPOTFILE%"
 
-if not exist "VaultHuntersServer\bot-harness.exe" goto :nobot
+if not exist "VaultHuntersServer\vh-testbot.exe" goto :nobot
 
 echo Sending %BOTS% test player(s) to %SPOT% on port %PORT% ...
 echo Close this window to make them leave.
-"VaultHuntersServer\bot-harness.exe" --server 127.0.0.1 --port %PORT% --count %BOTS% --pattern circle --center %SPOT% --hz 20 --jump-every 8 --vh-class 0
+"VaultHuntersServer\vh-testbot.exe" --server 127.0.0.1 --port %PORT% --count %BOTS% --pattern circle --center %SPOT% --hz 20 --jump-every 8 --vh-class 0
 pause
 exit /b 0
 
@@ -41,7 +41,7 @@ exit /b 1
 
 :nobot
 echo.
-echo   VaultHuntersServer\bot-harness.exe is missing - unpack the latest
+echo   VaultHuntersServer\vh-testbot.exe is missing - unpack the latest
 echo   VaultHuntersLink-Server.zip into this folder.
 echo.
 pause

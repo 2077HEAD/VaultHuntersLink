@@ -157,7 +157,7 @@ jobs:
           if (-not (Test-Path "$srv/Cyberverse.Server.Native.dll")) { throw 'native server DLL missing' }
           if (-not (Test-Path "$srv/Cyberverse.Server.exe")) { throw 'server exe missing' }
           Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Host.bat' out/server/
-          Copy-Item tools/bot-harness/build/bot-harness.exe $srv
+          Copy-Item tools/bot-harness/build/bot-harness.exe "$srv/vh-testbot.exe"
           Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Test Bot.bat' out/server/
 
           # ---- client ----
