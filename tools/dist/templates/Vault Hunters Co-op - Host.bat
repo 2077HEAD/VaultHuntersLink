@@ -27,6 +27,12 @@ if defined VH_DRYRUN (
     exit /b 0
 )
 
+rem Apply a pending update: server files that could not be replaced while it was running.
+if exist "VaultHuntersServer\_update\" (
+    echo Applying a Vault Hunters co-op update ...
+    robocopy "VaultHuntersServer\_update" "VaultHuntersServer" /MOVE /R:1 /W:1 /NFL /NDL /NJH /NJS >nul
+)
+
 echo Starting the Vault Hunters co-op server on UDP port %PORT% ...
 start "Vault Hunters Co-op Server - close this window to end the session" /d "%~dp0VaultHuntersServer" "%~dp0VaultHuntersServer\Cyberverse.Server.exe" --port=%PORT%
 
