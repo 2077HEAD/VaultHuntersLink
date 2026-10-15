@@ -31,6 +31,14 @@ rem Apply a pending update: server files that could not be replaced while it was
 if exist "VaultHuntersServer\_update\" (
     echo Applying a Vault Hunters co-op update ...
     robocopy "VaultHuntersServer\_update" "VaultHuntersServer" /MOVE /R:1 /W:1 /NFL /NDL /NJH /NJS >nul
+    if exist "VaultHuntersServer\_update\" (
+        echo.
+        echo   Could not apply the update. Close any open co-op server or test bot windows, then
+        echo   right-click this file and choose "Run as administrator" once.
+        echo.
+        pause
+        exit /b 1
+    )
 )
 
 echo Starting the Vault Hunters co-op server on UDP port %PORT% ...
