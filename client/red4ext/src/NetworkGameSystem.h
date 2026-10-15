@@ -67,6 +67,7 @@ private:
         // that skip a command don't accumulate lag (the next executed command lands on the
         // correct current path point).
         RED4ext::Vector4 idealPos {};
+        float hardTeleportCooldown = 0.0f; // seconds until the idle snap may teleport again
         bool idealValid = false;
         // D1 walk-loop driver: the ActionAnimationScriptProxy currently playing the walk
         // anim on this puppet (null while idle) + poll accumulator for clip-end detection.

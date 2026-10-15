@@ -41,6 +41,12 @@ public class NativeGameServer
         return Native.server_poll_message(_nativePtr);
     }
 
+    /// <summary>The connection comes from this PC (the host's own game).</summary>
+    public bool IsLocalConnection(uint connectionId)
+    {
+        return Native.server_connection_is_local(_nativePtr, connectionId);
+    }
+
     public void EnqueueMessage(Message message)
     {
         Native.server_enqueue_message(_nativePtr, message);

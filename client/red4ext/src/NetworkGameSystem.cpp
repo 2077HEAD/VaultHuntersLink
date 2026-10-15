@@ -346,6 +346,21 @@ void NetworkGameSystem::UpdatePuppetInterpolation(const float deltaTime)
 
         if (remaining < 0.02f || state.speed <= 0.01f)
         {
+            // Standing still but not where the network says (a teleport that didn't land while
+            // the puppet was far away and not simulated): put it there.
+            {
+                const float offX = state.idealPos.X - pos.X;
+                const float offY = state.idealPos.Y - pos.Y;
+                const float offZ = state.idealPos.Z - pos.Z;
+                state.hardTeleportCooldown -= deltaTime;
+                if (offX * offX + offY * offY + offZ * offZ > 9.0f && state.timeSinceUpdate < 5.0f &&
+                    state.hardTeleportCooldown <= 0.0f)
+                {
+                    state.hardTeleportCooldown = 0.5f;
+                    const RED4ext::Vector4 there = { state.idealPos.X, state.idealPos.Y, state.idealPos.Z, 1.0f };
+                    Red::CallVirtual(this, "HardTeleport", entity.value(), there, state.targetYaw);
+                }
+            }
             if (!state.idleApplied)
             {
                 state.speed = 0.0f;
@@ -759,8 +774,12 @@ void NetworkGameSystem::PollIncomingMessages()
                 // target — the next per-frame teleport command lands there (the old path
                 // zeroed `speed`, which stalled the puppet until the next packet: the
                 // once-per-second halting the client saw live 2026-07-17).
-                SDK->logger->InfoF(PLUGIN, "Entity %llu is %.1f m off target, snapping path point",
+                SDK->logger->InfoF(PLUGIN, "Entity %llu is %.1f m off target, teleporting it there",
                                    teleport.networkedEntityId, puppetLag);
+                // Move the puppet itself, not only the path point: with speed 0 the per-frame
+                // mover never runs, so a puppet that spawned or fell far behind (a player who
+                // loaded in kilometres away, 2026-10-15) stayed frozen where it first appeared.
+                Red::CallVirtual(this, "HardTeleport", entity.value(), worldPosition, teleport.yaw);
                 moveState.idealPos = worldPosition;
                 moveState.idealValid = true;
                 moveState.targetPosition = worldPosition;

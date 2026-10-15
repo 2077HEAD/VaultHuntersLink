@@ -52,6 +52,7 @@ public:
     [[nodiscard]] Message PollRecvQueue() const;
     void EnqueueSendQueue(Message msg) const;
     void SetConnectionStatusChangedCallback(void (*cb)(uint32_t, uint32_t));
+    [[nodiscard]] bool IsLocalConnection(uint32_t connection) const;
     /* DLL API stop */
 
     template<typename T>

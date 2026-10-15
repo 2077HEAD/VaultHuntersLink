@@ -38,4 +38,7 @@ public class Player
 
     /// <summary>A test bot (vh-testbot.exe). Bots never become lobby or party host.</summary>
     public bool IsBot;
+
+    /// <summary>Plays on the PC that runs the server: that player hosts the party, whoever signed in first.</summary>
+    public bool IsLocal;
 }

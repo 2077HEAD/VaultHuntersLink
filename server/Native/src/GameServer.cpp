@@ -356,3 +356,15 @@ void GameServer::ProcessSendQueue()
 }
 
 GameServer *SINGLETON_GAMESERVER = nullptr;
+
+// Vault Hunters: a connection from this same PC (the host's own game, which connects to
+// 127.0.0.1). The lobby makes that player the host, whoever signed in first.
+bool GameServer::IsLocalConnection(uint32_t connection) const
+{
+    SteamNetConnectionInfo_t info;
+    if (m_pInterface == nullptr || !m_pInterface->GetConnectionInfo(connection, &info))
+    {
+        return false;
+    }
+    return info.m_addrRemote.IsLocalHost();
+}

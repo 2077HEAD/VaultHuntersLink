@@ -181,6 +181,19 @@ public native class NetworkGameSystem extends IGameSystem {
     // command instead to establish whether ANY mover works in the current engine state.
     // Works only on puppets with an AI controller (vanilla baseline), which is what the
     // bisect currently spawns.
+    // A remote player who is far off (spawned kilometres away, fast travel, a long car ride):
+    // put the puppet there outright. The AI teleport in KinematicMove only lands when the puppet's
+    // AI is ticking, which it isn't for a puppet far from us; this works at any distance.
+    public func HardTeleport(entity: ref<Entity>, position: Vector4, yaw: Float) {
+        let go = entity as GameObject;
+        if !IsDefined(go) {
+            return;
+        }
+        let angles: EulerAngles;
+        angles.Yaw = yaw;
+        GameInstance.GetTeleportationFacility(go.GetGame()).Teleport(go, position, angles);
+    }
+
     public func KinematicMove(entity: ref<Entity>, position: Vector4, yaw: Float) {
         let puppet = entity as ScriptedPuppet;
         if IsDefined(puppet) {

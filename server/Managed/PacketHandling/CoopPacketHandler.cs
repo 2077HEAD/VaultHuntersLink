@@ -70,6 +70,7 @@ public class CoopPacketHandler
         return _server!.PlayerService.ConnectedPlayers.Values
             .Where(p => p.PuppetEntity != null)
             .OrderBy(p => p.IsBot) // test bots never host
+            .ThenByDescending(p => p.IsLocal) // the player on the server's PC hosts
             .ThenBy(p => p.JoinOrder)
             .ToList();
     }
@@ -80,15 +81,18 @@ public class CoopPacketHandler
         return _server!.PlayerService.ConnectedPlayers.Values.OrderBy(p => p.LobbyOrder).ToList();
     }
 
-    /// <summary>The lobby host: the earliest signed-in player that is not a test bot.</summary>
+    /// <summary>The lobby host: the player on the server's PC, else the earliest signed-in player
+    /// that is not a test bot. (Signing in first used to decide it, so a friend whose game reached
+    /// the server before the host's own game became host, 2026-10-15.)</summary>
     private Player? LobbyHost()
     {
-        return LobbyMembers().FirstOrDefault(p => !p.IsBot);
+        return LobbyMembers().Where(p => !p.IsBot).OrderByDescending(p => p.IsLocal).FirstOrDefault();
     }
 
     private void OnPlayerAuthenticated(Player player)
     {
         player.LobbyOrder = ++_lobbyCounter;
+        player.IsLocal = _server!.IsLocalConnection(player.ConnectionId);
         Logger.Info($"Co-op lobby: {player.Name} signed in");
         BroadcastLobby();
     }

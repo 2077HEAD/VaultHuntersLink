@@ -94,6 +94,10 @@ public static class Native
     [DllImport(LibraryName)]
     public static extern void server_enqueue_message(IntPtr server, Message message);
 
+    [DllImport(LibraryName)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool server_connection_is_local(IntPtr server, uint connectionId);
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void ConnectionStateChangedCallback(ESteamNetworkingConnectionState state, uint connectionId);
     

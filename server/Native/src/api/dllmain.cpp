@@ -83,6 +83,11 @@ extern "C" EXPORT uintptr_t message_data_allocate(const uint64_t size)
     return reinterpret_cast<uintptr_t>(malloc(size));
 }
 
+extern "C" EXPORT bool server_connection_is_local(const GameServer *server, uint32_t connection)
+{
+    return server->IsLocalConnection(connection);
+}
+
 extern "C" EXPORT void server_set_connection_state_changed_cb(GameServer *server, void (*cb)(uint32_t, uint32_t))
 {
     server->SetConnectionStatusChangedCallback(cb);
