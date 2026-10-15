@@ -250,19 +250,20 @@ public class CoopPacketHandler
     }
 
     /// <summary>
-    /// "vh.lobby": U0 = host connection id (0 = none), U1 = 1 once the session started,
-    /// U2 = the RECIPIENT's connection id,
+    /// "vh.lobby": U0 = host lobby id (0 = none), U1 = 1 once the session started,
+    /// U2 = the RECIPIENT's lobby id. Lobby ids are the small sign-in numbers (LobbyOrder):
+    /// connection ids are too large for the game's Int32 script values.
     /// Text = "id:name:ready:class:bot;..." in sign-in order (ready/bot are 0/1).
     /// </summary>
     private void SendLobbyTo(Player recipient, List<Player> members, Player? host)
     {
         var roster = string.Join(";", members.Select(m =>
-            $"{m.ConnectionId}:{LobbyName(m)}:{(m.LobbyReady ? 1 : 0)}:{m.LobbyClass}:{(m.IsBot ? 1 : 0)}"));
+            $"{m.LobbyOrder}:{LobbyName(m)}:{(m.LobbyReady ? 1 : 0)}:{m.LobbyClass}:{(m.IsBot ? 1 : 0)}"));
         var evt = new EntityScriptEvent { Data = ScriptEventData.Create("vh.lobby") };
         evt.Data.Sender = 0;
-        evt.Data.U0 = host?.ConnectionId ?? 0;
+        evt.Data.U0 = host?.LobbyOrder ?? 0;
         evt.Data.U1 = _sessionStarted ? 1ul : 0ul;
-        evt.Data.U2 = recipient.ConnectionId;
+        evt.Data.U2 = recipient.LobbyOrder;
         evt.Data.SetText(roster);
         _server!.EnqueueMessage(EMessageTypeClientbound.EntityScriptEvent, recipient.ConnectionId, 0, evt);
     }
