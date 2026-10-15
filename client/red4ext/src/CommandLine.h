@@ -35,3 +35,19 @@ inline std::optional<uint16_t> ParsePortFromCommandLine(char* commandLine) {
 
     return std::stoi(portString.value());
 }
+
+// Player name from the Vault Hunters launcher; without it the Windows user name is used.
+inline std::optional<std::string> ParseNameFromCommandLine(char* commandLine) {
+    constexpr auto needle = "--cyberverse-name=";
+    constexpr auto needleLen = std::char_traits<char>::length(needle);
+    auto name = ArgumentFromCommandLineUntilNextSpace(commandLine, needle, needleLen);
+    if (!name.has_value() || name->empty())
+    {
+        return {};
+    }
+    if (name->size() > 32)
+    {
+        name->resize(32);
+    }
+    return name;
+}

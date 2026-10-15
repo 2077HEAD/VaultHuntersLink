@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vault Hunters Link</title>
+<style>
+@font-face { font-family: "Bangers"; src: url(data:font/ttf;base64,/*BANGERS*/) format("truetype"); }
+:root {
+  --indigo: #16122E;
+  --indigo-2: #221B47;
+  --yellow: #F5DD3A;
+  --ink: #000;
+  --magenta: #FF2D8A;
+  --cyan: #2EE6F2;
+  --orange: #FF6A1A;
+  --paper: #FFF8D6;
+  --display: "Bangers", Impact, sans-serif;
+  --body: "Bahnschrift", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background:
+    radial-gradient(circle at 1px 1px, rgba(46,230,242,.10) 1px, transparent 1.6px) 0 0 / 14px 14px,
+    var(--indigo);
+  color: #fff; font: 15px/1.45 var(--body);
+  display: grid; grid-template-columns: 270px 1fr; overflow: hidden;
+  user-select: none;
+}
+button, input { font: inherit; }
+:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+
+/* ---------- left strip ---------- */
+aside {
+  background: var(--ink); border-right: 4px solid var(--yellow);
+  display: flex; flex-direction: column; padding: 26px 0 18px; position: relative;
+}
+.logo { padding: 0 22px 26px; transform: rotate(-4deg); }
+.logo .vh {
+  font: 64px/0.86 var(--display); color: var(--yellow); letter-spacing: 1px;
+  -webkit-text-stroke: 2px var(--ink);
+  text-shadow: 4px 4px 0 var(--magenta), 7px 7px 0 var(--ink);
+}
+.logo .link {
+  display: inline-block; margin-top: 8px; padding: 2px 12px 0;
+  font: 30px/1.1 var(--display); letter-spacing: 3px; color: var(--ink);
+  background: var(--cyan); transform: skewX(-12deg);
+}
+nav { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.tab {
+  position: relative; text-align: left; cursor: pointer;
+  margin-right: -4px; padding: 10px 22px 8px 28px;
+  font: 30px/1 var(--display); letter-spacing: 1.5px;
+  color: var(--yellow); background: transparent; border: 0;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 10px 50%);
+}
+.tab small { display: block; font: 12px/1.4 var(--body); letter-spacing: 0; color: #b9b3d9; margin-top: 2px; }
+.tab:hover { background: var(--indigo-2); }
+.tab[aria-selected="true"] {
+  background: var(--yellow); color: var(--ink);
+  /* ticket stub: perforation notches on the left edge */
+  -webkit-mask: radial-gradient(circle 5px at 0 50%, transparent 98%, #000) ;
+}
+.tab[aria-selected="true"] small { color: #3a3300; }
+.foot { margin-top: auto; padding: 0 22px; font-size: 12px; color: #8a83b3; }
+.foot b { color: var(--cyan); font-weight: 600; }
+
+/* ---------- main ---------- */
+main { overflow-y: auto; padding: 30px 40px 40px; }
+section[hidden] { display: none; }
+h1 {
+  font: 46px/1 var(--display); letter-spacing: 1.5px; margin: 0 0 6px;
+  color: #fff; text-shadow: 3px 3px 0 var(--magenta);
+}
+.lead { margin: 0 0 24px; color: #cfc9f0; max-width: 62ch; }
+
+.panel {
+  background: var(--yellow); color: var(--ink);
+  border: 3px solid var(--ink); box-shadow: 6px 6px 0 var(--ink);
+  padding: 18px 20px; margin-bottom: 22px;
+}
+.panel h2 { font: 26px/1 var(--display); letter-spacing: 1px; margin: 0 0 12px; }
+
+.btn {
+  cursor: pointer; border: 3px solid var(--ink); padding: 10px 22px 7px;
+  font: 26px/1 var(--display); letter-spacing: 1.5px;
+  background: var(--magenta); color: #fff; box-shadow: 4px 4px 0 var(--ink);
+  transform: skewX(-8deg); transition: transform .08s, box-shadow .08s;
+}
+.btn > span { display: inline-block; transform: skewX(8deg); }
+.btn:hover { background: #ff4b9d; }
+.btn:active { transform: skewX(-8deg) translate(3px,3px); box-shadow: 1px 1px 0 var(--ink); }
+.btn.cyan { background: var(--cyan); color: var(--ink); }
+.btn.dark { background: var(--ink); color: var(--yellow); box-shadow: 4px 4px 0 var(--magenta); }
+.btn.big { font-size: 40px; padding: 14px 34px 10px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+
+.check { display: flex; gap: 10px; align-items: center; cursor: pointer; font-weight: 600; }
+.check input { appearance: none; width: 24px; height: 24px; border: 3px solid var(--ink); background: #fff; margin: 0; cursor: pointer; }
+.check input:checked { background: var(--magenta) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4 10l4 4 8-9' fill='none' stroke='white' stroke-width='3.5'/%3E%3C/svg%3E") center/16px no-repeat; }
+
+/* status lights */
+.lights { display: grid; gap: 10px; }
+.light { display: grid; grid-template-columns: 22px 110px 1fr; gap: 12px; align-items: start; }
+.light i { width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--ink); margin-top: 1px; background: #c9c09a; }
+.light[data-s="ok"] i { background: #3BE37A; box-shadow: 0 0 0 3px rgba(59,227,122,.35); }
+.light[data-s="warn"] i { background: var(--orange); }
+.light[data-s="fail"] i { background: #E0182D; }
+.light[data-s="pending"].busy i { animation: blink .8s steps(2) infinite; }
+@keyframes blink { 50% { background: var(--yellow); } }
+.light b { font: 22px/1 var(--display); letter-spacing: 1px; }
+.light span { font-size: 14px; }
+
+/* the invite sticker: the one loud thing */
+.stickerwrap { margin: 26px 0 34px; display: flex; gap: 40px; align-items: center; flex-wrap: wrap; }
+.sticker { position: relative; display: inline-block; transform: rotate(-3deg); color: var(--ink); }
+.sticker .face { position: relative; z-index: 1; padding: 16px 30px 14px; background: var(--paper); border: 4px solid var(--ink); }
+.sticker::before {
+  content: ""; position: absolute; inset: 0; transform: translate(12px, 12px); z-index: 0;
+  background: radial-gradient(circle, var(--magenta) 2.2px, transparent 2.6px) 0 0 / 8px 8px;
+  border: 4px solid var(--ink);
+}
+.sticker .label { font: 600 13px/1 var(--body); color: #5a4f00; }
+.sticker .code { font: 56px/1 var(--display); letter-spacing: 4px; margin-top: 6px; }
+.sticker.empty .code { color: #a59c70; font-size: 34px; letter-spacing: 1px; }
+.sticker .copy { position: absolute; z-index: 2; right: -18px; top: -20px; transform: rotate(8deg); font-size: 20px; padding: 7px 14px 4px; }
+.home { font-size: 14px; color: #cfc9f0; max-width: 34ch; }
+.home code { font: 20px/1.3 var(--display); letter-spacing: 2px; color: var(--cyan); display: block; }
+
+/* log */
+.log {
+  background: #0a0818; border: 3px solid var(--cyan); color: #a9f6fb;
+  font: 12.5px/1.5 Consolas, "Cascadia Mono", monospace; height: 170px; overflow-y: auto;
+  padding: 10px 12px; white-space: pre-wrap; user-select: text;
+}
+details summary { cursor: pointer; font: 22px/1 var(--display); letter-spacing: 1px; color: var(--cyan); margin-bottom: 10px; }
+
+/* forms */
+label.field { display: block; margin-bottom: 16px; font-weight: 600; }
+label.field small { display: block; font-weight: 400; color: #4b4400; margin-top: 3px; }
+.input {
+  display: block; width: 100%; max-width: 440px; margin-top: 6px;
+  border: 3px solid var(--ink); background: #fff; color: var(--ink);
+  padding: 10px 12px; font-size: 17px; user-select: text;
+}
+.input.code { font: 34px/1 var(--display); letter-spacing: 4px; text-transform: uppercase; padding: 10px 14px 6px; max-width: 520px; }
+.hint { min-height: 22px; margin-top: 8px; font-weight: 600; }
+.hint.bad { color: #b0001a; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) rotate(-2deg);
+  background: var(--cyan); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink);
+  font: 24px/1 var(--display); letter-spacing: 1px; padding: 10px 20px 7px; opacity: 0; pointer-events: none; transition: opacity .2s;
+  max-width: 80vw;
+}
+.toast.show { opacity: 1; }
+.toast.bad { background: var(--orange); }
+
+.warnbar { background: var(--orange); color: var(--ink); border: 3px solid var(--ink); padding: 10px 14px; margin-bottom: 20px; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<aside>
+  <div class="logo"><div class="vh">VAULT<br>HUNTERS</div><div class="link">LINK</div></div>
+  <nav role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="host">Host<small>Run the session from this PC</small></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="join">Join<small>Play in a friend's world</small></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="settings">Settings<small>Name, port, game folder</small></button>
+  </nav>
+  <div class="foot">Playing as <b id="footName">-</b><br>Launcher <span id="version"></span></div>
+</aside>
+
+<main>
+  <div id="gameWarn" class="warnbar" hidden>Cyberpunk 2077 wasn't found. Put this launcher in your Cyberpunk 2077 folder, next to the bin and r6 folders.</div>
+
+  <!-- HOST -->
+  <section id="host">
+    <h1>Host a session</h1>
+    <p class="lead">Start the co-op server, send your friends the invite code, then launch. Everyone meets in the lobby on the main menu and loads in together.</p>
+
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <label class="check"><input type="checkbox" id="bots"> Add 3 test bots (for testing alone)</label>
+        <div class="row"><button class="btn" id="hostBtn"><span>Start hosting</span></button>
+        <button class="btn cyan" id="launchHost" disabled><span>Launch game</span></button></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Connection check</h2>
+      <div class="lights">
+        <div class="light" id="lServer" data-s="pending"><i></i><b>Server</b><span>Not started</span></div>
+        <div class="light" id="lRouter" data-s="pending"><i></i><b>Router</b><span>Not started</span></div>
+        <div class="light" id="lInternet" data-s="pending"><i></i><b>Internet</b><span>Not started</span></div>
+      </div>
+    </div>
+
+    <div class="stickerwrap">
+      <div class="sticker empty" id="sticker">
+        <div class="face"><div class="label">Invite code for friends anywhere</div>
+        <div class="code" id="inviteCode">Start hosting first</div></div>
+        <button class="btn cyan copy" id="copyInvite" hidden><span>Copy</span></button>
+      </div>
+      <div class="home" id="homeBox" hidden>Friends on your home Wi-Fi use this instead:<code id="lanCode"></code><button class="btn dark" id="copyLan" style="font-size:18px;padding:6px 12px 3px;margin-top:6px"><span>Copy</span></button></div>
+    </div>
+
+    <details>
+      <summary>Server log</summary>
+      <div class="log" id="log"></div>
+    </details>
+  </section>
+
+  <!-- JOIN -->
+  <section id="join" hidden>
+    <h1>Join a friend</h1>
+    <p class="lead">Paste the invite code your host sent you. The game starts and drops you into their lobby on the main menu.</p>
+    <div class="panel">
+      <label class="field">Invite code
+        <input class="input code" id="joinCode" placeholder="VH-XXXXX-XXXXX" spellcheck="false" autocomplete="off">
+        <small>An address like 100.64.1.2:1337 works too.</small>
+      </label>
+      <div class="hint" id="joinHint"></div>
+    </div>
+    <button class="btn big" id="launchJoin" disabled><span>Join and launch</span></button>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="settings" hidden>
+    <h1>Settings</h1>
+    <p class="lead">Changes save as you type.</p>
+    <div class="panel">
+      <label class="field">Your name
+        <input class="input" id="sName" maxlength="24" spellcheck="false">
+        <small>Shown to other players. Letters, numbers, - _ and . only, up to 16 characters.</small>
+      </label>
+      <label class="field">Port
+        <input class="input" id="sPort" type="number" min="1024" max="65535" style="max-width:160px">
+        <small>The UDP port the host uses. Only change it if friends can't connect on 1337.</small>
+      </label>
+      <label class="check"><input type="checkbox" id="sRouter"> Ask my router to open the port automatically (UPnP)</label>
+    </div>
+    <div class="panel">
+      <h2>Game folder</h2>
+      <p id="sFolder" style="margin:0 0 12px;word-break:break-all;user-select:text"></p>
+      <button class="btn dark" id="openFolder" style="font-size:20px"><span>Open folder</span></button>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const bridge = window.chrome && window.chrome.webview;
+let seq = 0;
+const waiting = new Map();
+
+function call(cmd, args) {
+  return new Promise((resolve, reject) => {
+    if (!bridge) return reject(new Error("Not running inside the launcher"));
+    const id = ++seq;
+    waiting.set(id, { resolve, reject });
+    bridge.postMessage({ id, cmd, args: args || {} });
+  });
+}
+
+function toast(text, bad) {
+  const t = $("toast");
+  t.textContent = text;
+  t.classList.toggle("bad", !!bad);
+  t.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove("show"), bad ? 5000 : 2200);
+}
+
+let hosting = false;
+let starting = false;
+
+function setLight(el, s) {
+  el.dataset.s = s.state;
+  el.classList.toggle("busy", starting);
+  el.querySelector("span").textContent = s.text;
+}
+
+function onHost(m) {
+  hosting = m.running;
+  setLight($("lServer"), m.server);
+  setLight($("lRouter"), m.router);
+  setLight($("lInternet"), m.internet);
+  const st = $("sticker");
+  st.classList.toggle("empty", !m.invite);
+  $("inviteCode").textContent = m.invite || (hosting ? (starting ? "Working it out..." : "No internet code - see Internet above") : "Start hosting first");
+  $("copyInvite").hidden = !m.invite;
+  $("homeBox").hidden = !m.lan;
+  $("lanCode").textContent = m.lan;
+  $("hostBtn").firstElementChild.textContent = hosting ? "Stop hosting" : "Start hosting";
+  $("hostBtn").classList.toggle("dark", hosting);
+  $("launchHost").disabled = !hosting;
+  $("bots").disabled = hosting;
+}
+
+function logLine(line) {
+  const log = $("log");
+  const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
+  log.textContent += line + "\n";
+  if (log.textContent.length > 60000) log.textContent = log.textContent.slice(-40000);
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+if (bridge) bridge.addEventListener("message", e => {
+  const m = e.data;
+  if (m.event === "host") return onHost(m);
+  if (m.event === "log") return logLine(m.line);
+  const w = waiting.get(m.id);
+  if (!w) return;
+  waiting.delete(m.id);
+  m.ok ? w.resolve(m.data) : w.reject(new Error(m.error));
+});
+
+// tabs
+document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", t === tab));
+  document.querySelectorAll("main section").forEach(s => s.hidden = s.id !== tab.dataset.tab);
+}));
+
+// host
+$("hostBtn").addEventListener("click", async () => {
+  try {
+    if (hosting) {
+      await call("hostStop");
+      toast("Hosting stopped");
+    } else {
+      starting = true;
+      $("hostBtn").disabled = true;
+      await call("hostStart", { bots: $("bots").checked });
+    }
+  } catch (e) { toast(e.message, true); }
+  finally {
+    starting = false;
+    $("hostBtn").disabled = false;
+    document.querySelectorAll(".light").forEach(l => l.classList.remove("busy"));
+  }
+});
+$("copyInvite").addEventListener("click", () => call("copy", { text: $("inviteCode").textContent }).then(() => toast("Invite code copied")));
+$("copyLan").addEventListener("click", () => call("copy", { text: $("lanCode").textContent }).then(() => toast("Home code copied")));
+$("launchHost").addEventListener("click", () => call("launch", { mode: "host" })
+  .then(() => toast("Starting Cyberpunk 2077..."), e => toast(e.message, true)));
+
+// join
+let decodeTimer;
+$("joinCode").addEventListener("input", () => {
+  clearTimeout(decodeTimer);
+  decodeTimer = setTimeout(checkJoin, 200);
+});
+async function checkJoin() {
+  const code = $("joinCode").value.trim();
+  const hint = $("joinHint");
+  if (!code) { hint.textContent = ""; $("launchJoin").disabled = true; return; }
+  try {
+    const d = await call("decode", { code });
+    hint.classList.toggle("bad", !d);
+    hint.textContent = d ? `Connects to ${d.host}:${d.port}` : "That doesn't look like an invite code yet.";
+    $("launchJoin").disabled = !d;
+  } catch (e) { hint.textContent = e.message; }
+}
+$("launchJoin").addEventListener("click", () => call("launch", { mode: "join", code: $("joinCode").value })
+  .then(() => toast("Starting Cyberpunk 2077..."), e => toast(e.message, true)));
+
+// settings
+let saveTimer;
+function saveSettings() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      const r = await call("saveSettings", { name: $("sName").value, port: parseInt($("sPort").value) || 1337, openRouter: $("sRouter").checked });
+      $("footName").textContent = r.name;
+    } catch (e) { toast(e.message, true); }
+  }, 300);
+}
+["sName", "sPort"].forEach(id => $(id).addEventListener("input", saveSettings));
+$("sRouter").addEventListener("change", saveSettings);
+$("openFolder").addEventListener("click", () => call("openFolder"));
+
+// start-up
+(async () => {
+  try {
+    const s = await call("state");
+    $("sName").value = s.name;
+    $("sPort").value = s.port;
+    $("sRouter").checked = s.openRouter;
+    $("sFolder").textContent = s.gameFolder;
+    $("footName").textContent = s.name;
+    $("version").textContent = "v" + String(s.version).split("+")[0];
+    $("joinCode").value = s.lastJoin || "";
+    $("gameWarn").hidden = s.gameFound;
+    if (!s.serverInstalled) $("hostBtn").title = "The co-op server isn't installed";
+    $("bots").closest("label").hidden = !s.botsInstalled;
+    if (s.lastJoin) checkJoin();
+  } catch (e) { toast(e.message, true); }
+})();
+</script>
+</body>
+</html>

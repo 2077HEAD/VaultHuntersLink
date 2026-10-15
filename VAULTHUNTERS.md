@@ -39,15 +39,22 @@ Requirements (everyone): Cyberpunk 2077 **2.31**, RED4ext, redscript, Codeware, 
 Engine Tweaks, and the Vault Hunters mod.
 
 1. Everyone: unpack `VaultHuntersLink-Client.zip` into the Cyberpunk 2077 folder.
-2. Host: also unpack `VaultHuntersLink-Server.zip` there, then run **`Vault Hunters Co-op - Host.bat`**.
-3. Friends: put the host's address in `vaulthunters-coop.txt`, then run
-   **`Vault Hunters Co-op - Join.bat`**.
+2. Host: also unpack `VaultHuntersLink-Server.zip` there.
+3. Everyone: start **`Vault Hunters Launcher.exe`** (in the Cyberpunk 2077 folder).
+   * Host: **Host** tab, *Start hosting*. The launcher starts the server, asks the router to open
+     UDP port 1337 (UPnP), and shows an invite code like `VH-7K2Q9-XMD4A`. Send it to your
+     friends, then *Launch game*.
+   * Friends: **Join** tab, paste the code, *Join and launch*.
+   * Everyone meets in the lobby on the main menu; the host starts the session.
 
-Easiest way to reach each other over the internet: all join the same free virtual LAN
-([Tailscale](https://tailscale.com), ZeroTier or Radmin VPN) and use the host's address from that
-app. Otherwise the host forwards UDP port 1337.
+No VPN is needed when the router allows UPnP. If the launcher reports that the router didn't
+answer, forward UDP port 1337 to the host PC by hand. If it reports carrier-grade NAT, your
+provider doesn't give you a reachable address: use [Tailscale](https://tailscale.com) or ZeroTier
+and paste the host's address from that app into the Join box instead of a code.
 
-Launch through the .bat files, not through Steam/Epic — the store launchers drop the connect
+The .bat files still work as before.
+
+Launch through the launcher or the .bat files, not through Steam/Epic — the store launchers drop the connect
 arguments. A normal launch is plain single player.
 
 ## Building

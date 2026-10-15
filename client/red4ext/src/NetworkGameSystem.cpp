@@ -176,7 +176,8 @@ void NetworkGameSystem::ConnectionStatusChangedCallback(SteamNetConnectionStatus
         SDK->logger->Info(PLUGIN, "Socket connected, authenticating");
         InitAuthServerBound auth_packet = {};
         auth_packet.protocol_version = PROTOCOL_VERSION_CURRENT;
-        auth_packet.username = buf;
+        const auto launcherName = ParseNameFromCommandLine(GetCommandLineA());
+        auth_packet.username = launcherName.has_value() ? launcherName.value() : std::string(buf);
 
         // TODO: Maybe we could manage this singleton access better? But then, the Game's GameSystem Container is the owner of "this"
         Red::GetGameSystem<NetworkGameSystem>()->EnqueueMessage(0, auth_packet);

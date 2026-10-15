@@ -140,6 +140,13 @@ jobs:
         shell: pwsh
         run: dotnet publish server/Managed -c Release -r win-x64 --self-contained true -o out/server/VaultHuntersServer
 
+      - name: Publish launcher (single exe, self-contained)
+        shell: pwsh
+        run: |
+          python tools/launcher/ui/build.py tools/launcher/ui/Bangers-Regular.ttf
+          dotnet publish tools/launcher/VaultHuntersLauncher.csproj -c Release -o out/launcher
+          if (-not (Test-Path 'out/launcher/Vault Hunters Launcher.exe')) { throw 'launcher exe missing' }
+
       - name: Read version
         shell: pwsh
         run: |
@@ -171,6 +178,8 @@ jobs:
           Copy-Item client/assets/choomlink_puppet.archive "$cli/archive/pc/mod/"
           Copy-Item client/assets/choomlink/choomlink.yaml "$cli/r6/tweaks/VaultHuntersLink/"
           Copy-Item 'tools/dist/templates/Vault Hunters Co-op - Join.bat' $cli
+          Copy-Item 'out/launcher/Vault Hunters Launcher.exe' $cli
+          Copy-Item tools/launcher/ui/Bangers-OFL.txt "$cli/VaultHuntersLauncher-Fonts-OFL.txt"
           $cfg = (Get-Content tools/dist/templates/vaulthunters-coop.txt -Raw).Replace('@SERVER_ADDRESS@', '127.0.0.1').Replace('@SERVER_PORT@', '1337')
           [System.IO.File]::WriteAllText("$cli/vaulthunters-coop.txt", $cfg, $utf8NoBom)
           foreach ($d in @($cli, 'out/server')) {
