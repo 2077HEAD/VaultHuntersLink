@@ -646,10 +646,21 @@ void NetworkGameSystem::PollIncomingMessages()
                 continue;
             }
 
-            if (m_networkedEntitiesLookup.contains(spawn_entity.networkedEntityId))
+            if (const auto stale = m_networkedEntitiesLookup.find(spawn_entity.networkedEntityId);
+                stale != m_networkedEntitiesLookup.end())
             {
-                SDK->logger->WarnF(PLUGIN, "Already have a spawned entity for %llu", spawn_entity.networkedEntityId);
-                continue;
+                // Vault Hunters fix (2026-10-17): a second SpawnEntity for a puppet we still hold
+                // means our copy is out of date (the server re-sent it after a class change, or
+                // the old one was never cleaned up). Drop the old entity and spawn the new one
+                // instead of ignoring the packet and leaving the player invisible.
+                SDK->logger->WarnF(PLUGIN, "Already have a spawned entity for %llu, replacing it",
+                                   spawn_entity.networkedEntityId);
+                const auto staleEntityId = stale->second;
+                Red::CallVirtual(this, "DestroyTransientEntity", staleEntityId);
+                m_movementState.erase(staleEntityId);
+                m_networkedEntitiesLookup.erase(spawn_entity.networkedEntityId);
+                m_pendingEquips.erase(spawn_entity.networkedEntityId);
+                m_pendingHealth.erase(spawn_entity.networkedEntityId);
             }
 
             // TODO: separate spawning component
@@ -1038,7 +1049,12 @@ void NetworkGameSystem::PollIncomingMessages()
             }
 
             m_movementState.erase(entityId);
-            m_networkedEntitiesLookup.erase(entityId);
+            // Vault Hunters fix (2026-10-17): the lookup is keyed by networkedEntityId. This used
+            // to erase(entityId) -- the LOCAL entity id, a different key -- so the stale entry
+            // stayed behind and every later SpawnEntity for that puppet (class swap, or walking
+            // out of and back into the interest radius, e.g. leaving a car) was rejected with
+            // "Already have a spawned entity": the player stayed invisible until a reconnect.
+            m_networkedEntitiesLookup.erase(destroy_entity.networkedEntityId);
             // Drop any state that was still waiting for this entity to resolve. Without this the
             // buffers grow for the session, and worse: a networkedEntityId reused for a later
             // entity would inherit the previous occupant's equip/health.
