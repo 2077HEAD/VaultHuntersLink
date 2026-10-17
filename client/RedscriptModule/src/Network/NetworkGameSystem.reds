@@ -19,7 +19,18 @@ public native class NetworkGameSystem extends IGameSystem {
     public func UnregisterScriptEventListener(listener: ref<NetScriptEventListener>) -> Void {
         ArrayRemove(this.m_scriptEventListeners, listener);
     }
+    // ---- Vault Hunters co-op: PvP gate. Damage from another player's puppet only lands while
+    // this is false. Upstream default (false) keeps the original always-hostile behaviour; the
+    // Vault Hunters mod switches it on at load and lifts it for duels (CoopSystem.reds).
+    private let m_pvpBlocked: Bool;
 
+    public func SetPvPBlocked(blocked: Bool) -> Void {
+        this.m_pvpBlocked = blocked;
+    }
+
+    public func IsPvPBlocked() -> Bool {
+        return this.m_pvpBlocked;
+    }
     public func IsMultiplayerActive() -> Bool {
         return this.FullyConnected;
     }

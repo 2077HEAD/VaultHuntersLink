@@ -396,7 +396,8 @@ private final func Process(hitEvent: ref<gameHitEvent>, cache: ref<CacheData>) -
         && IsDefined(puppet) && !instigator.IsPlayer()
         && puppet.choomlink_threatRegistered
         && puppet.choomlink_lastShotDamage > 0.0
-        && IsDefined(hitEvent.attackComputed) {
+        && IsDefined(hitEvent.attackComputed)
+        && !GameInstance.GetNetworkGameSystem().IsPvPBlocked() {
         hitEvent.attackData.RemoveFlag(hitFlag.DealNoDamage);
         hitEvent.attackComputed.SetAttackValue(puppet.choomlink_lastShotDamage,
                                                gamedataDamageType.Physical);
